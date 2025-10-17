@@ -1,7 +1,54 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, ChefHat, Check, CookingPot, XCircle } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { ArrowLeft, ChefHat, Check, CookingPot, XCircle, Copy, CheckCircle } from 'lucide-react';
+
+// --- Funções para gerar o Payload do PIX (BR Code) ---
+const crc16 = (payload) => {
+    let crc = 0xFFFF;
+    const polynomial = 0x1021;
+    for (let i = 0; i < payload.length; i++) {
+        crc ^= payload.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+            crc = (crc & 0x8000) ? (crc << 1) ^ polynomial : crc << 1;
+        }
+    }
+    return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+};
+
+const formatField = (id, value) => {
+    const length = value.length.toString().padStart(2, '0');
+    return `${id}${length}${value}`;
+};
+
+const generatePixPayload = (key, merchantName, city, amount, txid = '***') => {
+    const cleanKey = String(key || '').trim().replace(/[^A-Z0-9.-@]/gi, '');
+    const cleanName = String(merchantName || '').trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 25);
+    const cleanCity = String(city || '').trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 15);
+    
+    const field26 = 
+        formatField('00', 'BR.GOV.BCB.PIX') +
+        formatField('01', cleanKey);
+
+    const amountStr = Number(amount || 0).toFixed(2);
+
+    const payload = [
+        formatField('00', '01'),
+        formatField('26', field26),
+        formatField('52', '0000'),
+        formatField('53', '986'),
+        formatField('54', amountStr),
+        formatField('58', 'BR'),
+        formatField('59', cleanName),
+        formatField('60', cleanCity),
+        formatField('62', formatField('05', txid))
+    ].join('');
+    
+    const payloadWithCrcMarker = `${payload}6304`;
+    const finalCrc = crc16(payloadWithCrcMarker);
+    return payloadWithCrcMarker + finalCrc;
+};
+
 
 export default function CozinhaPage() {
     const [pedidos, setPedidos] = useState([]);
@@ -9,8 +56,52 @@ export default function CozinhaPage() {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [orderToPay, setOrderToPay] = useState(null);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('Dinheiro');
-    const [cardType, setCardType] = useState(null); // 'Débito' ou 'Crédito'
+    const [cardType, setCardType] = useState(null);
     const [errorMessage, setErrorMessage] = useState('');
+    const [pixPayload, setPixPayload] = useState('');
+    const [copySuccess, setCopySuccess] = useState('');
+    const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+    const qrCanvasRef = useRef(null);
+
+    const PIX_KEY = process.env.NEXT_PUBLIC_PIX_KEY || '';
+    const PIX_MERCHANT_NAME = process.env.NEXT_PUBLIC_PIX_MERCHANT_NAME;
+    const PIX_MERCHANT_CITY = process.env.NEXT_PUBLIC_PIX_MERCHANT_CITY;
+
+    // Efeito para carregar a biblioteca de QR Code via CDN
+    useEffect(() => {
+        const scriptId = 'qrious-cdn';
+        if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js';
+        script.async = true;
+        document.body.appendChild(script);
+        }
+    }, []);
+
+    // Efeito para gerar o QR Code quando o modal abre
+    useEffect(() => {
+        if (isPaymentModalOpen && selectedPaymentMethod === 'Pix' && qrCanvasRef.current && window.QRious && orderToPay) {
+            const payload = generatePixPayload(PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY, orderToPay.valor_total);
+            setPixPayload(payload);
+            
+            new window.QRious({
+                element: qrCanvasRef.current,
+                value: payload,
+                size: 220,
+                padding: 20,
+            });
+        }
+    }, [isPaymentModalOpen, selectedPaymentMethod, orderToPay, PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY]);
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(pixPayload).then(() => {
+        setCopySuccess('Copiado!');
+        setTimeout(() => setCopySuccess(''), 2000);
+        }, () => {
+        setCopySuccess('Falha ao copiar.');
+        });
+    };
 
     const fetchPedidos = async () => {
         try {
@@ -55,7 +146,7 @@ export default function CozinhaPage() {
 
     const openPaymentModal = (pedido) => {
         setOrderToPay(pedido);
-        setSelectedPaymentMethod('Dinheiro'); // Reseta para o padrão
+        setSelectedPaymentMethod('Dinheiro');
         setCardType(null);
         setIsPaymentModalOpen(true);
     };
@@ -87,6 +178,7 @@ export default function CozinhaPage() {
             setPedidos(currentPedidos => currentPedidos.filter(p => p.id !== orderToPay.id));
             setIsPaymentModalOpen(false);
             setOrderToPay(null);
+            setIsSuccessModalOpen(true); // Mostra a notificação de sucesso
         } catch (error) {
             console.error(error);
             setErrorMessage(error.message);
@@ -180,11 +272,8 @@ export default function CozinhaPage() {
 
             {isPaymentModalOpen && orderToPay && (
               <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-                <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-sm m-4">
+                <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm m-4 max-h-[90vh] overflow-y-auto">
                   <h2 className="text-2xl font-bold mb-6 text-center">Finalizar Pedido #{orderToPay.id}</h2>
-                  <p className="text-5xl font-bold text-center mb-6 text-[#A16207]">
-                    {Number(orderToPay.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
                   <h3 className="text-lg font-semibold mb-3">Forma de Pagamento:</h3>
                   <div className="flex flex-col gap-3 mb-6">
                     {['Dinheiro', 'Pix'].map(method => (
@@ -204,27 +293,42 @@ export default function CozinhaPage() {
                     </button>
                     {selectedPaymentMethod === 'Cartão' && (
                         <div className="flex gap-3 animate-fade-in">
-                            <button
-                                onClick={() => setCardType('Débito')}
-                                className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Débito' ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-100 text-blue-800 border-blue-200'}`}
-                            >
-                                Débito
-                            </button>
-                            <button
-                                onClick={() => setCardType('Crédito')}
-                                className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Crédito' ? 'bg-purple-600 text-white border-purple-600' : 'bg-purple-100 text-purple-800 border-purple-200'}`}
-                            >
-                                Crédito
-                            </button>
+                            <button onClick={() => setCardType('Débito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Débito' ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-100 text-blue-800 border-blue-200'}`}>Débito</button>
+                            <button onClick={() => setCardType('Crédito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Crédito' ? 'bg-purple-600 text-white border-purple-600' : 'bg-purple-100 text-purple-800 border-purple-200'}`}>Crédito</button>
                         </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-3">
-                    <button onClick={handleConfirmPayment} className="w-full bg-[#A16207] text-white py-3 rounded-lg font-bold">Confirmar Pagamento</button>
-                    <button onClick={() => setIsPaymentModalOpen(false)} className="w-full bg-transparent text-gray-600 py-2 rounded-lg font-semibold hover:bg-gray-100">Cancelar</button>
+                    {selectedPaymentMethod === 'Pix' && (
+                        <div className="text-center border-t pt-4">
+                            <p className="font-semibold mb-2">Pague com PIX ({Number(orderToPay.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})</p>
+                            <canvas ref={qrCanvasRef} className="mx-auto border"></canvas>
+                            <p className="text-sm mt-2 text-gray-600">Ou use a chave "Copia e Cola":</p>
+                            <div className="mt-1 flex items-center justify-between p-2 bg-gray-100 rounded-lg w-full">
+                                <span className="text-gray-800 font-mono text-xs mr-2 overflow-hidden whitespace-nowrap text-ellipsis max-w-[calc(100%-40px)]">{pixPayload}</span>
+                                <button onClick={copyToClipboard} className="bg-gray-200 p-1 rounded-md hover:bg-gray-300">
+                                    {copySuccess ? copySuccess : <Copy size={16} />}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                  <div className="flex justify-end gap-3 mt-6 border-t pt-4">
+                    <button onClick={() => setIsPaymentModalOpen(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">Cancelar</button>
+                    <button onClick={handleConfirmPayment} className="px-4 py-2 bg-[#A16207] text-white rounded-lg font-bold">Confirmar Pagamento</button>
                   </div>
                 </div>
               </div>
+            )}
+
+            {isSuccessModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+                    <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">
+                        <CheckCircle size={50} className="text-green-500 mx-auto mb-4" />
+                        <h2 className="text-xl font-bold mb-2">Pedido Pago com Sucesso!</h2>
+                        <button onClick={() => setIsSuccessModalOpen(false)} className="mt-4 px-6 py-2 bg-gray-200 rounded-lg font-semibold">
+                            Fechar
+                        </button>
+                    </div>
+                </div>
             )}
 
             {errorMessage && (
