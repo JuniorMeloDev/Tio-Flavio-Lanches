@@ -66,9 +66,9 @@ export default function CardapioPage() {
   const [copySuccess, setCopySuccess] = useState('');
   const qrCanvasRef = useRef(null);
 
-  const PIX_KEY = process.env.NEXT_PUBLIC_PIX_KEY || 'CHAVE-PIX-DE-TESTE';
-  const PIX_MERCHANT_NAME = process.env.NEXT_PUBLIC_PIX_MERCHANT_NAME || 'Tio Flavio Lanches';
-  const PIX_MERCHANT_CITY = process.env.NEXT_PUBLIC_PIX_MERCHANT_CITY || 'JABOATAO';
+  const PIX_KEY = process.env.NEXT_PUBLIC_PIX_KEY;
+  const PIX_MERCHANT_NAME = process.env.NEXT_PUBLIC_PIX_MERCHANT_NAME;
+  const PIX_MERCHANT_CITY = process.env.NEXT_PUBLIC_PIX_MERCHANT_CITY;
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.preco * item.quantity, 0), [cart]);
   const totalItems = useMemo(() => cart.reduce((acc, item) => acc + item.preco * item.quantity, 0), [cart]);
