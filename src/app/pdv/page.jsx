@@ -6,12 +6,12 @@ import { ShoppingCart, ArrowLeft, XCircle, CheckCircle, X, Printer, Ban, Plus, C
 // Função para gerar e imprimir o comprovativo
 const generateAndPrintReceipt = (venda) => {
     const receiptContent = `
-        <div style="font-family: 'Courier New', monospace; width: 300px; padding: 10px; font-size: 12px; color: #000;">
+        <div style="font-family: 'Courier New', monospace; width: 300px; padding: 10px; font-size: 15px; color: #000; font-weight: bold;">
             <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px;">
-                <h1 style="font-size: 16px; margin: 0; font-weight: bold;">Tio Flávio Lanches</h1>
-                <p style="margin: 2px 0; font-size: 11px;">Rua Fictícia, 123</p>
+                <h1 style="font-size: 20px; margin: 0; font-weight: bold;">Tio Flávio Lanches</h1>
+                <p style="margin: 2px 0; font-size: 15px;">Rua Antônio Ferreira Campos, 5170</p>
             </div>
-            <div style="margin-bottom: 10px; font-size: 11px;">
+            <div style="margin-bottom: 10px; font-size: 15px;">
                 <p style="margin: 2px 0;"><strong>ID Venda:</strong> #${venda.id}</p>
                 <p style="margin: 2px 0;"><strong>Data:</strong> ${new Date(venda.criado_em).toLocaleString('pt-BR')}</p>
             </div>
@@ -23,20 +23,24 @@ const generateAndPrintReceipt = (venda) => {
                     </div>
                 `).join('')}
             </div>
-            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; margin-top: 10px;">
                 <span>Total:</span>
                 <span>R$ ${Number(venda.valor_total).toFixed(2)}</span>
             </div>
-            <p style="font-size: 11px; margin-top: 5px;"><strong>Pagamento:</strong> ${venda.metodo_pagamento}</p>
+            <p style="font-size: 15px; margin-top: 5px;"><strong>Pagamento:</strong> ${venda.metodo_pagamento}</p>
         </div>
     `;
 
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(`<html><head><title>Comprovante</title></head><body>${receiptContent}</body></html>`);
+    // Adicionado style no body para remover margens padrão
+    printWindow.document.write(`<html><head><title>Comprovante</title></head><body style="margin:0; padding:0;">${receiptContent}</body></html>`);
     printWindow.document.close();
     printWindow.focus();
-    printWindow.print();
-    printWindow.close();
+    // Adiciona um pequeno delay para garantir a renderização antes de imprimir
+    setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+    }, 250); // 250ms de delay
 };
 
 // --- Funções para gerar o Payload do PIX (BR Code) ---

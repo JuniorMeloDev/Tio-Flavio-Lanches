@@ -23,11 +23,11 @@ const formatField = (id, value) => {
 
 const generatePixPayload = (key, merchantName, city, amount, txid = '***') => {
     // Garantindo que a chave PIX, nome e cidade sejam seguros para o BR Code
-    const cleanKey = String(key || '').trim().replace(/[^A-Z0-9.\-\/ ]/gi, '');
+    const cleanKey = String(key || '').trim().replace(/[^A-Z0-9.\-\/ ]/gi, ''); // Permitindo espaços na chave se necessário
     const cleanName = String(merchantName || '').trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 25);
     const cleanCity = String(city || '').trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 15);
-    
-    const field26 = 
+
+    const field26 =
         formatField('00', 'BR.GOV.BCB.PIX') +
         formatField('01', cleanKey);
 
@@ -36,16 +36,16 @@ const generatePixPayload = (key, merchantName, city, amount, txid = '***') => {
     const payload = [
         formatField('00', '01'),
         formatField('26', field26),
-        formatField('52', '0000'),
-        formatField('53', '986'),
-        formatField('54', amountStr),
-        formatField('58', 'BR'),
-        formatField('59', cleanName),
-        formatField('60', cleanCity),
-        formatField('62', formatField('05', txid))
+        formatField('52', '0000'), // Merchant Category Code (MCC) - 0000 para não especificado
+        formatField('53', '986'), // Código da Moeda (986 = BRL)
+        formatField('54', amountStr), // Valor da transação
+        formatField('58', 'BR'), // País
+        formatField('59', cleanName), // Nome do Recebedor
+        formatField('60', cleanCity), // Cidade do Recebedor
+        formatField('62', formatField('05', txid)) // TXID (Identificador da Transação)
     ].join('');
-    
-    const payloadWithCrcMarker = `${payload}6304`;
+
+    const payloadWithCrcMarker = `${payload}6304`; // Adiciona ID do CRC16 e tamanho (04)
     const finalCrc = crc16(payloadWithCrcMarker);
     return payloadWithCrcMarker + finalCrc;
 };
@@ -66,16 +66,18 @@ export default function CardapioPage() {
   const [copySuccess, setCopySuccess] = useState('');
   const qrCanvasRef = useRef(null);
 
+  // NOVO ESTADO: Armazena o último método de pagamento usado com sucesso
+  const [lastPaymentMethod, setLastPaymentMethod] = useState(null);
+
   const PIX_KEY = process.env.NEXT_PUBLIC_PIX_KEY;
   const PIX_MERCHANT_NAME = process.env.NEXT_PUBLIC_PIX_MERCHANT_NAME;
   const PIX_MERCHANT_CITY = process.env.NEXT_PUBLIC_PIX_MERCHANT_CITY;
 
   const total = useMemo(() => cart.reduce((acc, item) => acc + item.preco * item.quantity, 0), [cart]);
-  const totalItems = useMemo(() => cart.reduce((acc, item) => acc + item.preco * item.quantity, 0), [cart]);
+  const totalItems = useMemo(() => cart.reduce((acc, item) => acc + item.quantity, 0), [cart]); // Corrigido
 
-  // Efeito para carregar a biblioteca de QR Code e gerar o código
+  // Efeito para carregar a biblioteca de QR Code via CDN
   useEffect(() => {
-    // 1. Injeta o script qrious (CDN) se não estiver presente
     const scriptId = 'qrious-cdn';
     if (!document.getElementById(scriptId)) {
       const script = document.createElement('script');
@@ -86,24 +88,23 @@ export default function CardapioPage() {
     }
   }, []);
 
+  // Efeito para gerar o QR Code quando o modal abre
   useEffect(() => {
     if (isPaymentModalOpen && selectedPaymentMethod === 'Pix' && qrCanvasRef.current && window.QRious) {
         const payload = generatePixPayload(PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY, total);
         setPixPayload(payload);
-        
-        // 2. Gera QR Code usando o objeto global QRious
+
         new window.QRious({
             element: qrCanvasRef.current,
             value: payload,
             size: 220,
-            padding: 20,
+            padding: 20, // Aumentado padding para melhor leitura
         });
     }
   }, [isPaymentModalOpen, selectedPaymentMethod, total, PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY]);
 
 
   const copyToClipboard = () => {
-    // Copia o Payload PIX completo, que é o BR Code
     navigator.clipboard.writeText(pixPayload).then(() => {
       setCopySuccess('Copiado!');
       setTimeout(() => setCopySuccess(''), 2000);
@@ -120,6 +121,7 @@ export default function CardapioPage() {
       setProducts(data);
     } catch (error) {
       console.error(error);
+      setErrorMessage('Não foi possível carregar o cardápio. Tente novamente mais tarde.'); // Mensagem de erro para o usuário
     } finally {
       setLoading(false);
     }
@@ -147,7 +149,7 @@ export default function CardapioPage() {
         const item = parents[parentName];
         if(!finalMenu[item.categoria]) finalMenu[item.categoria] = [];
         const minPrice = Math.min(...item.variations.map(v => v.preco));
-        item.variations.sort((a, b) => a.preco - b.preco);
+        item.variations.sort((a, b) => a.preco - b.preco); // Ordenar por preço pode ser útil
         finalMenu[item.categoria].push({ isParent: true, nome: parentName, preco: minPrice, descricao: item.variations[0]?.descricao, ...item });
     }
     for(const category in standalone){
@@ -155,7 +157,7 @@ export default function CardapioPage() {
         finalMenu[category].push(...standalone[category]);
     }
     for (const category in finalMenu) {
-        finalMenu[category].sort((a, b) => a.nome.localeCompare(b.nome));
+        finalMenu[category].sort((a, b) => a.nome.localeCompare(b.nome)); // Ordenar alfabeticamente
     }
     return finalMenu;
   }, [products]);
@@ -163,6 +165,17 @@ export default function CardapioPage() {
   const updateCart = (product, quantity) => {
     if (quantity > product.quantidade_estoque) {
         setErrorMessage(`Desculpe, só temos ${product.quantidade_estoque} unidades de "${product.nome}" em estoque.`);
+        // Limita a quantidade ao estoque máximo se tentar adicionar mais
+        setCart(currentCart => {
+            const itemIndex = currentCart.findIndex(item => item.id === product.id);
+            if (itemIndex > -1) {
+                const newCart = [...currentCart];
+                newCart[itemIndex].quantity = product.quantidade_estoque;
+                return newCart;
+            }
+            // Se o item não estava no carrinho e tentou adicionar mais que o estoque, não adiciona
+            return currentCart;
+        });
         return;
     }
     setCart(currentCart => {
@@ -178,6 +191,8 @@ export default function CardapioPage() {
       }
       return [...currentCart, { ...product, quantity }];
     });
+    // Limpa a mensagem de erro se a operação foi bem-sucedida
+    setErrorMessage('');
   };
 
   const handleConfirmPayment = async () => {
@@ -203,25 +218,34 @@ export default function CardapioPage() {
         body: JSON.stringify(saleData),
       });
       const responseData = await res.json();
-      if (!res.ok) throw new Error(responseData.message || 'Ocorreu um erro desconhecido.');
+      if (!res.ok) throw new Error(responseData.message || 'Ocorreu um erro ao enviar o pedido.');
+
+      // GUARDA O MÉTODO DE PAGAMENTO ANTES DE ABRIR O MODAL DE SUCESSO
+      setLastPaymentMethod(finalPaymentMethod);
+
       setIsPaymentModalOpen(false);
       setIsSuccessModalOpen(true);
       setCart([]);
       setCustomerName('');
+      // Resetar seleção de pagamento para o próximo pedido (opcional, mas bom UX)
+      setSelectedPaymentMethod('Pix');
+      setCardType(null);
+
     } catch (error) {
-      setErrorMessage(error.message);
-      setIsPaymentModalOpen(false);
+      console.error("Erro ao finalizar venda:", error);
+      setErrorMessage(error.message || 'Não foi possível enviar o pedido. Tente novamente.');
+      setIsPaymentModalOpen(false); // Fecha o modal de pagamento em caso de erro também
     }
   };
-  
+
   const toggleVariations = (parentName) => {
       setOpenVariations(prev => ({...prev, [parentName]: !prev[parentName]}));
   };
 
-  const categoryOrder = ['Lanches', 'Supremo Grill', 'Bebidas Especiais', 'Bebidas'];
+  const categoryOrder = ['Lanches', 'Supremo Grill', 'Bebidas Especiais', 'Bebidas']; // Ordem desejada
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] font-sans p-4 sm:p-6 pb-28">
+    <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] font-sans p-4 sm:p-6 pb-28"> {/* Padding bottom maior */}
       <div className="max-w-2xl mx-auto">
         <header className="text-center mb-8">
             <img src="/Logo.png" alt="Tio Flávio Lanches Logo" width="150" height="75" className="mx-auto mb-2" />
@@ -234,36 +258,43 @@ export default function CardapioPage() {
                   <h2 className="text-2xl font-semibold text-white border-b-2 border-[#A16207] pb-2 mb-4">{category}</h2>
                   <div className="space-y-4">
                     {processedMenu[category].map(product => {
+                       const isParentOutOfStock = product.isParent && product.variations.every(v => v.quantidade_estoque <= 0);
+                       const isSimpleOutOfStock = !product.isParent && product.quantidade_estoque <= 0;
+                       const isOutOfStock = isParentOutOfStock || isSimpleOutOfStock;
+
                        if(product.isParent){
                             const isOpen = openVariations[product.nome];
                             return (
-                                <div key={product.nome} className="bg-white/5 rounded-lg transition-all duration-300">
-                                    <div onClick={() => toggleVariations(product.nome)} className="flex justify-between items-center p-3 cursor-pointer">
+                                <div key={product.nome} className={`bg-white/5 rounded-lg transition-all duration-300 ${isOutOfStock ? 'opacity-50' : ''}`}>
+                                    <div onClick={!isOutOfStock ? () => toggleVariations(product.nome) : undefined} className={`flex justify-between items-center p-3 ${!isOutOfStock ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                                         <div>
                                             <p className="text-lg text-white">{product.nome}</p>
                                             {product.descricao && <p className="text-sm text-gray-300 mt-1 max-w-md">{product.descricao}</p>}
                                             <p className="text-md font-semibold text-yellow-200 mt-1">
                                                 A partir de {Number(product.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                             </p>
+                                            {isOutOfStock && <span className="text-xs text-red-400 font-bold ml-2">(Esgotado)</span>}
                                         </div>
-                                        <div className={`text-white transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
-                                            <ChevronDown size={24} />
-                                        </div>
+                                        {!isOutOfStock && (
+                                          <div className={`text-white transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
+                                              <ChevronDown size={24} />
+                                          </div>
+                                        )}
                                     </div>
-                                    {isOpen && (
+                                    {isOpen && !isOutOfStock && (
                                         <div className="px-3 pb-3">
                                             <div className="mt-2 pt-3 border-t border-white/10 space-y-2">
                                                 {product.variations.map(variation => {
                                                     const cartItem = cart.find(item => item.id === variation.id);
                                                     const quantity = cartItem ? cartItem.quantity : 0;
-                                                    const isOutOfStock = variation.quantidade_estoque <= 0;
+                                                    const variationIsOutOfStock = variation.quantidade_estoque <= 0;
                                                     return (
-                                                        <div key={variation.id} className={`flex justify-between items-center pl-4 ${isOutOfStock ? 'opacity-50' : ''}`}>
+                                                        <div key={variation.id} className={`flex justify-between items-center pl-4 ${variationIsOutOfStock ? 'opacity-50' : ''}`}>
                                                             <div>
                                                               <p className="text-white">{variation.variationName}</p>
                                                               <p className="text-sm text-yellow-300">{Number(variation.preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                                                             </div>
-                                                            {isOutOfStock ? (
+                                                            {variationIsOutOfStock ? (
                                                                 <span className="font-bold text-red-400 text-sm">ESGOTADO</span>
                                                             ) : quantity === 0 ? (
                                                                 <button onClick={() => updateCart(variation, 1)} className="bg-transparent border border-yellow-200 text-yellow-200 rounded-full w-7 h-7 flex items-center justify-center transition-transform hover:scale-110">
@@ -285,10 +316,10 @@ export default function CardapioPage() {
                                 </div>
                             );
                         }
-                      
+
+                      // Renderização para produto simples
                       const cartItem = cart.find(item => item.id === product.id);
                       const quantity = cartItem ? cartItem.quantity : 0;
-                      const isOutOfStock = product.quantidade_estoque <= 0;
                       return (
                         <div key={product.id} className={`flex justify-between items-center bg-white/5 p-3 rounded-lg ${isOutOfStock ? 'opacity-50' : ''}`}>
                             <div>
@@ -321,13 +352,14 @@ export default function CardapioPage() {
           </div>
         )}
       </div>
-      
+
+      {/* --- Barra Inferior do Carrinho --- */}
       {cart.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm p-4 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.1)]">
+          <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-sm p-4 shadow-[0_-5px_15px_-5px_rgba(0,0,0,0.1)] z-10">
               <div className="max-w-2xl mx-auto flex justify-between items-center">
                   <div>
                       <p className="font-bold text-lg text-[#422006]">Meu Pedido</p>
-                      <p className="text-sm text-[#654321]">{totalItems} {totalItems > 1 ? 'itens' : 'item'}</p>
+                      <p className="text-sm text-[#654321]">{totalItems} {totalItems !== 1 ? 'itens' : 'item'}</p>
                   </div>
                   <button onClick={() => setIsPaymentModalOpen(true)} className="bg-[#A16207] text-white font-bold py-3 px-6 rounded-lg flex items-center gap-2 transition-transform hover:scale-105">
                       <span>Finalizar</span>
@@ -337,44 +369,47 @@ export default function CardapioPage() {
           </div>
       )}
 
+      {/* --- Modal de Pagamento --- */}
       {isPaymentModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm m-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Finalizar Pedido</h2>
             <div className="my-4">
                 <label className="block text-gray-800 mb-2 font-semibold">Seu Nome (para identificação)</label>
-                <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full p-2 border border-gray-300 rounded" required />
+                <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full p-2 border border-gray-300 rounded" required placeholder='Digite seu nome...'/>
             </div>
             <h3 className="text-lg font-semibold mb-3">Forma de Pagamento:</h3>
             <div className="flex flex-col gap-3 mb-6">
-              {['Dinheiro'].map(method => (
-                <button
-                    key={method}
-                    onClick={() => { setSelectedPaymentMethod(method); setCardType(null); }}
-                    className={`w-full py-3 rounded-lg font-semibold text-lg border-2 ${selectedPaymentMethod === method ? 'bg-[#A16207] text-white border-[#A16207]' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
-                >
-                    {method}
-                </button>
-              ))}
+              {/* Opção Dinheiro */}
+              <button
+                  onClick={() => { setSelectedPaymentMethod('Dinheiro'); setCardType(null); }}
+                  className={`w-full py-3 rounded-lg font-semibold text-lg border-2 ${selectedPaymentMethod === 'Dinheiro' ? 'bg-[#A16207] text-white border-[#A16207]' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
+              >
+                  Dinheiro
+              </button>
+               {/* Opção Pix */}
                <button
-                    onClick={() => setSelectedPaymentMethod('Pix')}
+                    onClick={() => { setSelectedPaymentMethod('Pix'); setCardType(null); }}
                     className={`w-full py-3 rounded-lg font-semibold text-lg border-2 ${selectedPaymentMethod === 'Pix' ? 'bg-[#A16207] text-white border-[#A16207]' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
                 >
                     Pix
                 </button>
+              {/* Opção Cartão */}
               <button
-                onClick={() => setSelectedPaymentMethod('Cartão')}
+                onClick={() => { setSelectedPaymentMethod('Cartão'); setCardType(null); /* Reset cardType ao selecionar Cartão */ }}
                 className={`w-full py-3 rounded-lg font-semibold text-lg border-2 ${selectedPaymentMethod === 'Cartão' ? 'bg-[#A16207] text-white border-[#A16207]' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
               >
                 Cartão
               </button>
+              {/* Opções Débito/Crédito se Cartão selecionado */}
               {selectedPaymentMethod === 'Cartão' && (
                 <div className="flex gap-3 animate-fade-in">
-                    <button onClick={() => setCardType('Débito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Débito' ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-100 text-blue-800 border-blue-200'}`}>Débito</button>
-                    <button onClick={() => setCardType('Crédito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Crédito' ? 'bg-purple-600 text-white border-purple-600' : 'bg-purple-100 text-purple-800 border-purple-200'}`}>Crédito</button>
+                    <button onClick={() => setCardType('Débito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Débito' ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200'}`}>Débito</button>
+                    <button onClick={() => setCardType('Crédito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Crédito' ? 'bg-purple-600 text-white border-purple-600' : 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200'}`}>Crédito</button>
                 </div>
               )}
             </div>
+            {/* Seção PIX */}
             {selectedPaymentMethod === 'Pix' && (
                 <div className="text-center border-t pt-4">
                     <p className="font-semibold mb-2">Pague com PIX ({total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})</p>
@@ -382,37 +417,57 @@ export default function CardapioPage() {
                     <p className="text-sm mt-2 text-gray-600">Ou use a chave "Copia e Cola":</p>
                     <div className="mt-1 flex items-center justify-between p-2 bg-gray-100 rounded-lg w-full">
                         <span className="text-gray-800 font-mono text-xs mr-2 overflow-hidden whitespace-nowrap text-ellipsis max-w-[calc(100%-40px)]">{pixPayload}</span>
-                        <button onClick={copyToClipboard} className="bg-gray-200 p-1 rounded-md hover:bg-gray-300">
-                            {copySuccess ? copySuccess : <Copy size={16} />}
+                        <button onClick={copyToClipboard} title="Copiar chave PIX" className="bg-gray-200 p-1 rounded-md hover:bg-gray-300">
+                            {copySuccess ? <CheckCircle size={16} className="text-green-600"/> : <Copy size={16} />}
                         </button>
                     </div>
                 </div>
             )}
+            {/* Botões de Ação */}
             <div className="flex justify-end gap-3 mt-6 border-t pt-4">
-              <button onClick={() => setIsPaymentModalOpen(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">Voltar</button>
-              <button onClick={handleConfirmPayment} className="px-4 py-2 bg-[#A16207] text-white rounded-lg">Enviar Pedido</button>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Voltar</button>
+              <button onClick={handleConfirmPayment} className="px-4 py-2 bg-[#A16207] text-white rounded-lg font-semibold hover:bg-[#8f5606]">Enviar Pedido</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* MODIFICADO: Modal de Sucesso com mensagem condicional */}
       {isSuccessModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm text-center">
             <CheckCircle size={50} className="text-green-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-gray-900 mb-2">Pedido enviado com sucesso!</h2>
-            <p className="text-gray-700 mb-6">Por favor, dirija-se ao balcão ou chame o atendente para confirmar o pagamento.</p>
-            <button onClick={() => setIsSuccessModalOpen(false)} className="mt-4 px-6 py-2 bg-[#A16207] text-white rounded-lg font-semibold">Fechar</button>
+
+            {/* Mensagem condicional baseada no último método de pagamento */}
+            {lastPaymentMethod === 'Pix' ? (
+                <p className="text-gray-700 mb-6">Por favor, dirija-se ao balcão ou chame o atendente para confirmar o pagamento.</p>
+            ) : (
+                <p className="text-gray-700 mb-6">Por favor, dirija-se ao balcão para efetuar o pagamento do seu pedido.</p>
+            )}
+
+            {/* Botão Fechar agora reseta lastPaymentMethod */}
+            <button
+                onClick={() => {
+                    setIsSuccessModalOpen(false);
+                    setLastPaymentMethod(null); // Reseta o estado
+                }}
+                className="mt-4 px-6 py-2 bg-[#A16207] text-white rounded-lg font-semibold hover:bg-[#8f5606]"
+            >
+                Fechar
+            </button>
           </div>
         </div>
       )}
+
+      {/* --- Modal de Erro --- */}
       {errorMessage && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm text-center">
             <Ban size={50} className="text-yellow-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-gray-900 mb-2">Atenção</h2>
             <p className="text-gray-700 mb-6">{errorMessage}</p>
-            <button onClick={() => setErrorMessage('')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold">Fechar</button>
+            <button onClick={() => setErrorMessage('')} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300">Fechar</button>
           </div>
         </div>
       )}
