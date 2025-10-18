@@ -7,7 +7,7 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { ShoppingBag, Calendar, DollarSign, CreditCard, ArrowLeft, Printer, X, Settings, Loader2, Save, FileText, AlertCircle, Download } from 'lucide-react'; // Ícones adicionados
 
-// Função para gerar e imprimir o comprovativo INDIVIDUAL (mantida com bold)
+// Função para gerar e imprimir o comprovativo INDIVIDUAL (ATUALIZADA para quebra de linha)
 const generateAndPrintReceipt = (venda) => {
     const receiptContent = `
         <div style="font-family: 'Courier New', monospace; width: 300px; padding: 10px; font-size: 15px; color: #000; font-weight: bold;">
@@ -20,11 +20,11 @@ const generateAndPrintReceipt = (venda) => {
                  <p style="margin: 2px 0;"><strong>Data:</strong> ${new Date(venda.criado_em).toLocaleString('pt-BR')}</p>
              </div>
              <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin-bottom: 10px;">
-                 ${venda.itens_venda?.map(item => `
-                     <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                         <span style="width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.produtos?.nome || 'Produto Removido'} (${item.quantidade}x)</span>
-                         <span>R$ ${(item.quantidade * item.preco_unitario).toFixed(2)}</span>
-                     </div>
+                 ${venda.itens?.map(item => `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3px;">
+                        <span style="max-width: 200px;">${item.produtos?.nome || 'Produto Removido'} (${item.quantidade}x)</span>
+                        <span>R$ ${(item.quantidade * item.preco_unitario).toFixed(2)}</span>
+                    </div>
                  `).join('')}
              </div>
              <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; margin-top: 10px;">
@@ -69,21 +69,21 @@ const generateAndPrintCostReport = (vendas, totais, filters) => {
             .summary-grid span:nth-child(odd) { font-weight: normal; text-align: left; }
             .summary-grid span:nth-child(even) { font-weight: bold; text-align: right; }
             .total-profit { font-size: 12pt; }
-            .cost { color: #880000; }
-            .profit-positive { color: #006600; }
-            .profit-negative { color: #aa0000; }
+            .cost { color: #000; }
+            .profit-positive { color: #000; } 
+            .profit-negative { color: #000; } 
             .no-print { display: none; }
             tfoot tr { background-color: #e0e0e0; font-weight: bold;}
         }
         body { font-family: 'Arial', sans-serif; font-size: 12px; }
-        h1 { font-size: 18px; }
-        h2 { font-size: 14px; margin-top: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;}
+        h1 { font-size: 28px; }
+        h2 { font-size: 20px; margin-top: 15px; border-bottom: 1px dashed #ccc; padding-bottom: 5px;}
         .summary-grid { display: grid; grid-template-columns: auto auto; gap: 5px 15px; margin-bottom: 15px; }
         .summary-grid span:nth-child(even) { font-weight: bold; text-align: right; }
         .total-profit { font-size: 14px; }
-        .cost { color: #c0392b; }
-        .profit-positive { color: #27ae60; }
-        .profit-negative { color: #c0392b; }
+        .cost { color: #000; }
+        .profit-positive { color: #000; } 
+        .profit-negative { color: #000; } 
         table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px;}
         th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }
         th { background-color: #f0f0f0; font-weight: bold; }
