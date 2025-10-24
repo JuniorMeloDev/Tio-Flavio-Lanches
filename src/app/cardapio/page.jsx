@@ -371,9 +371,9 @@ export default function CardapioPage() {
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Finalizar Pedido</h2>
             <div className="my-4">
                 <label className="block text-gray-800 mb-2 font-semibold">Seu Nome (para identificação)</label>
-                <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full p-2 border border-gray-300 rounded" required />
+                <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full p-2 border border-gray-300 text-gray-800 rounded" required />
             </div>
-            <h3 className="text-lg font-semibold mb-3">Forma de Pagamento:</h3>
+            <h3 className="text-lg font-semibold mb-3 text-gray-800">Forma de Pagamento:</h3>
             <div className="flex flex-col gap-3 mb-6">
               {['Dinheiro'].map(method => (
                 <button
@@ -405,7 +405,7 @@ export default function CardapioPage() {
             </div>
             {selectedPaymentMethod === 'Pix' && (
                 <div className="text-center border-t pt-4">
-                    <p className="font-semibold mb-2">Pague com PIX ({total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})</p>
+                    <p className="font-semibold mb-2 text-gray-800">Pague com PIX ({total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})</p>
                     <canvas ref={qrCanvasRef} className="mx-auto border w-[220px] h-[220px]"></canvas>
                     <p className="text-sm mt-2 text-gray-600">Ou use a chave "Copia e Cola":</p>
                     <div className="mt-1 flex items-center justify-between p-2 bg-gray-100 rounded-lg w-full">

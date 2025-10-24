@@ -129,7 +129,7 @@ const CartComponent = ({
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     placeholder="Opcional (Ex: João da mesa 5)"
-                    className="w-full p-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#A16207]"
+                    className="w-full p-2 pl-10 border border-gray-300 text-gray-800 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#A16207]"
                 />
             </div>
         </div>
@@ -141,11 +141,11 @@ const CartComponent = ({
             cart.map((item) => (
             <div key={item.id} className="flex justify-between items-center mb-3">
                 <div>
-                <p className="font-semibold">{item.nome}</p>
+                <p className="font-semibold text-gray-800">{item.nome}</p>
                 <p className="text-sm text-gray-500">{item.quantity} x R$ {Number(item.preco).toFixed(2)}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <p className="font-bold">R$ {(item.preco * item.quantity).toFixed(2)}</p>
+                    <p className="font-bold text-gray-800">R$ {(item.preco * item.quantity).toFixed(2)}</p>
                     <button onClick={() => removeFromCart(item.id)} className="text-red-500 hover:text-red-700">
                         <X size={18}/>
                     </button>
@@ -156,7 +156,7 @@ const CartComponent = ({
         </div>
         <div className="border-t pt-4">
             <div className="flex justify-between items-center mb-4">
-                <span className="text-xl font-bold">Total</span>
+                <span className="text-xl font-bold text-gray-800">Total</span>
                 <span className="text-2xl font-bold text-[#A16207]">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
             </div>
             <button
@@ -546,7 +546,7 @@ export default function PdvPage() {
                                     inputMode='numeric'
                                     name="discount"
                                     id="discount"
-                                    className="focus:ring-[#A16207] focus:border-[#A16207] block w-full pl-8 pr-3 py-1 sm:text-sm border-gray-300 rounded-md text-right"
+                                    className="focus:ring-[#A16207] focus:border-[#A16207] block w-full pl-8 pr-3 py-1 sm:text-sm text-red-500 border-gray-300 rounded-md text-right"
                                     placeholder="0,00"
                                     value={discount}
                                     onChange={handleDiscountChange}
@@ -555,9 +555,9 @@ export default function PdvPage() {
                         </div>
                     </div>
                     
-                    <h2 className="text-2xl font-bold mb-6 text-center">Total a Pagar: {totalAfterDiscount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h2>
+                    <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">Total a Pagar: {totalAfterDiscount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h2>
                     
-                    <h3 className="text-lg font-semibold mb-3">Forma de Pagamento:</h3>
+                    <h3 className="text-lg font-semibold mb-3 text-gray-800">Forma de Pagamento:</h3>
                     <div className="flex flex-col gap-3 mb-6">
                     {['Dinheiro', 'Pix', 'Cartão'].map(method => (
                         <button key={method} onClick={() => { setSelectedPaymentMethod(method); if(method !== 'Cartão') setCardType(null); }}
@@ -579,7 +579,7 @@ export default function PdvPage() {
                             <div className="mt-1 relative rounded-md shadow-sm">
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-gray-500 sm:text-sm">R$</span></div>
                                 <input type="text" inputMode='numeric' name="amountReceived" id="amountReceived"
-                                    className="focus:ring-[#A16207] focus:border-[#A16207] block w-full pl-8 pr-3 py-2 sm:text-sm border-gray-300 rounded-md"
+                                    className="focus:ring-[#A16207] focus:border-[#A16207] block w-full pl-8 pr-3 py-2 sm:text-sm text-gray-600 border-gray-300 rounded-md"
                                     placeholder="0,00" value={amountReceived} onChange={handleAmountReceivedChange}
                                 />
                             </div>
@@ -595,7 +595,7 @@ export default function PdvPage() {
                     
                     {selectedPaymentMethod === 'Pix' && (
                         <div className="text-center border-t pt-4">
-                            <p className="font-semibold mb-2">Pague com PIX</p>
+                            <p className="font-semibold mb-2 text-gray-600">Pague com PIX</p>
                             <canvas ref={qrCanvasRef} className="mx-auto border"></canvas>
                             <p className="text-sm mt-2 text-gray-600">Ou use a chave "Copia e Cola":</p>
                             <div className="mt-1 flex items-center justify-between p-2 bg-gray-100 rounded-lg w-full">
