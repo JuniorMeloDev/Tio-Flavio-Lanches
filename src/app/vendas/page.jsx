@@ -5,9 +5,9 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 // Adiciona a importação do SheetJS (xlsx)
 import * as XLSX from 'xlsx';
-import { ShoppingBag, Calendar, DollarSign, CreditCard, ArrowLeft, Printer, X, Settings, Loader2, Save, FileText, AlertCircle, Download } from 'lucide-react'; // Ícones adicionados
+import { ShoppingBag, Calendar, CreditCard, ArrowLeft, Printer, X, Settings, Loader2, Save, FileText, AlertCircle, Download } from 'lucide-react'; // Ícones adicionados
 
-// Função para gerar e imprimir o comprovativo INDIVIDUAL (ATUALIZADA para quebra de linha)
+// ... (A função generateAndPrintReceipt permanece a mesma) ...
 const generateAndPrintReceipt = (venda) => {
     const receiptContent = `
         <div style="font-family: 'Courier New', monospace; width: 300px; padding: 10px; font-size: 15px; color: #000; font-weight: bold;">
@@ -44,8 +44,7 @@ const generateAndPrintReceipt = (venda) => {
     }, 250);
 };
 
-
-// --- Função para gerar e imprimir o RELATÓRIO DE CUSTOS ---
+// ... (A função generateAndPrintCostReport permanece a mesma) ...
 const generateAndPrintCostReport = (vendas, totais, filters) => {
     const startDate = filters.startDate ? new Date(filters.startDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'Início';
     const endDate = filters.endDate ? new Date(filters.endDate + 'T23:59:59').toLocaleDateString('pt-BR') : 'Fim';
@@ -164,6 +163,11 @@ export default function VendasPage() {
   const [taxasError, setTaxasError] = useState('');
   const [taxasSuccess, setTaxasSuccess] = useState('');
 
+  // NOVO: Estados de paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10); // 10 itens por página
+
+  // ... (Funções de Taxas permanecem as mesmas) ...
   // --- Funções de Taxas ---
   const fetchTaxas = async () => {
     setIsLoadingTaxas(true); setTaxasError('');
@@ -208,12 +212,15 @@ export default function VendasPage() {
     fetchVendas();
   }, []);
 
+  // ATUALIZADO: Handlers de filtro agora resetam a página
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters(prev => ({ ...prev, [name]: value }));
+    setCurrentPage(1); // Reseta para a página 1
   };
   const clearFilters = () => {
     setFilters({ startDate: '', endDate: '', minValor: '', maxValor: '' });
+    setCurrentPage(1); // Reseta para a página 1
   };
 
   const filteredVendas = useMemo(() => {
@@ -237,6 +244,7 @@ export default function VendasPage() {
   }, [allVendas, filters]);
 
   const totaisPeriodo = useMemo(() => {
+    // Totais são calculados com base em TODAS as vendas filtradas, não apenas as paginadas
     return filteredVendas.reduce((acc, venda) => {
         acc.receitaBruta += venda.valor_total;
         acc.custoProdutos += venda.custoProdutosCalculado;
@@ -245,6 +253,19 @@ export default function VendasPage() {
         return acc;
     }, { receitaBruta: 0, custoProdutos: 0, custoPagamento: 0, lucroBruto: 0 });
   }, [filteredVendas]);
+
+  // NOVO: Memo para calcular o total de páginas
+  const totalPages = useMemo(() => {
+      return Math.ceil(filteredVendas.length / itemsPerPage);
+  }, [filteredVendas.length, itemsPerPage]);
+
+  // NOVO: Memo para "fatiar" as vendas para a página atual
+  const paginatedVendas = useMemo(() => {
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = startIndex + itemsPerPage;
+      return filteredVendas.slice(startIndex, endIndex);
+  }, [filteredVendas, currentPage, itemsPerPage]);
+
 
   const handlePrintReceipt = async (saleId) => {
     if (!saleId) return;
@@ -264,6 +285,7 @@ export default function VendasPage() {
     generateAndPrintCostReport(filteredVendas, totaisPeriodo, filters);
   };
 
+  // ... (A função handleExportXLSX permanece a mesma) ...
   const handleExportXLSX = () => {
         if (filteredVendas.length === 0) { alert("Nenhuma venda encontrada para exportar."); return; }
         const dataToExport = filteredVendas.map(v => ({
@@ -303,7 +325,7 @@ export default function VendasPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] p-4 sm:p-6 lg:p-8 font-sans">
       <div className="max-w-7xl mx-auto">
-        {/* Cabeçalho */}
+        {/* ... (Cabeçalho permanece o mesmo) ... */}
         <div className="mb-6 flex items-center justify-between">
            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
             <ShoppingBag size={32} /> Relatório de Vendas
@@ -324,7 +346,7 @@ export default function VendasPage() {
           </div>
         </div>
 
-        {/* Filtros e Botões de Ação */}
+        {/* ... (Filtros e Botões de Ação permanecem os mesmos) ... */}
         <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg">
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div>
@@ -369,7 +391,7 @@ export default function VendasPage() {
             </div>
         </div>
 
-        {/* Resumo Financeiro */}
+        {/* ... (Resumo Financeiro permanece o mesmo, ele mostra os TOTAIS do filtro, não da página) ... */}
         <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
              <div>
                 <p className="text-sm text-gray-300">Vendas Período</p>
@@ -403,7 +425,7 @@ export default function VendasPage() {
               <p className="text-center text-gray-800 py-10 flex justify-center items-center gap-2"><Loader2 className="animate-spin" size={20}/> Carregando vendas...</p>
             ) : error ? (
               <p className="text-center text-red-500 py-10 flex justify-center items-center gap-2"><AlertCircle size={20} /> {error}</p>
-            ) : filteredVendas.length === 0 ? (
+            ) : filteredVendas.length === 0 ? ( // Checa o total filtrado
                <p className="text-center text-gray-800 py-10">Nenhuma venda encontrada para os filtros aplicados.</p>
             ) : (
               <table className="w-full text-left min-w-[800px]">
@@ -417,7 +439,8 @@ export default function VendasPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200/50">
-                  {filteredVendas.map((venda) => (
+                  {/* ATUALIZADO: Mapeando as vendas paginadas */}
+                  {paginatedVendas.map((venda) => (
                     <tr key={venda.id} className="hover:bg-black/10">
                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">#{venda.id}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
@@ -434,7 +457,6 @@ export default function VendasPage() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
                         <div className="flex items-center justify-end gap-1">
-                           <DollarSign size={14} />
                            {Number(venda.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </div>
                       </td>
@@ -453,10 +475,57 @@ export default function VendasPage() {
               </table>
             )}
           </div>
+
+          {/* NOVO: Controles de Paginação */}
+          {filteredVendas.length > 0 && totalPages > 1 && !loading && !error && (
+            <div className="p-4 flex flex-col sm:flex-row justify-between items-center text-sm text-gray-700 bg-white/20 border-t border-gray-200/50">
+                {/* Seletor de Itens por Página */}
+                <div className="flex items-center gap-2 mb-2 sm:mb-0">
+                    <label htmlFor="itemsPerPage" className="font-medium">Itens por página:</label>
+                    <select
+                        id="itemsPerPage"
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                            setItemsPerPage(Number(e.target.value));
+                            setCurrentPage(1); // Resetar para pág 1 ao mudar
+                        }}
+                        className="p-1 rounded-md border-gray-300 bg-white/50 text-gray-900 focus:ring-1 focus:ring-gray-400"
+                    >
+                        <option value={10}>10</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                    </select>
+                </div>
+                
+                {/* Contagem e Botões */}
+                <div className="flex items-center gap-4">
+                    <span>
+                        Página <span className="font-bold">{currentPage}</span> de <span className="font-bold">{totalPages}</span>
+                    </span>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1 rounded-md bg-white/30 hover:bg-white/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Anterior
+                        </button>
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1 rounded-md bg-white/30 hover:bg-white/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Próximo
+                        </button>
+                    </div>
+                </div>
+            </div>
+          )}
         </div>
       </div>
 
-       {/* --- Modal Configurar Taxas --- */}
+       {/* ... (Modal de Taxas permanece o mesmo) ... */}
         {isTaxasModalOpen && (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
                 <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -489,7 +558,7 @@ export default function VendasPage() {
                                             <span className="text-gray-500 sm:text-sm">%</span>
                                         </div>
                                     </div>
-                                </div>
+                                Vendas</div>
                             ))}
                         </div>
                     )}
