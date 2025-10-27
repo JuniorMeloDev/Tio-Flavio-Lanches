@@ -276,25 +276,49 @@ export default function PdvPage() {
         fetchProducts();
     }, []);
 
+    // INÍCIO DA ALTERAÇÃO
     const processedProducts = useMemo(() => {
         let filtered = searchTerm
         ? products.filter(p => p.nome.toLowerCase().includes(searchTerm.toLowerCase()))
         : products.filter(p => p.categoria === activeCategory);
-        const parents = {}; const standalone = [];
+        
+        const parents = {}; 
+        const standalone = [];
+        
         filtered.forEach(product => {
-        if (product.nome.includes(':')) {
-            const [parentName, variationName] = product.nome.split(':').map(s => s.trim());
-            if (!parents[parentName]) {
-            parents[parentName] = { isParent: true, nome: parentName, variations: [], preco: product.preco, categoria: product.categoria };
+            if (product.nome.includes(':')) {
+                const [parentName, variationName] = product.nome.split(':').map(s => s.trim());
+                if (!parents[parentName]) {
+                    // Removido 'preco: product.preco' daqui
+                    parents[parentName] = { 
+                        isParent: true, 
+                        nome: parentName, 
+                        variations: [], 
+                        categoria: product.categoria 
+                    };
+                }
+                parents[parentName].variations.push({ ...product, variationName });
+            } else { 
+                standalone.push(product); 
             }
-            parents[parentName].variations.push({ ...product, variationName });
-        } else { standalone.push(product); }
         });
-        Object.values(parents).forEach(parent => { parent.variations.sort((a,b) => a.variationName.localeCompare(b.variationName)); });
+
+        // Agora, iteramos nos parents para definir o preço mínimo e ordenar as variações
+        Object.values(parents).forEach(parent => {
+            if (parent.variations.length > 0) {
+                // Define o preço do 'pai' como o menor preço das suas variações
+                parent.preco = Math.min(...parent.variations.map(v => v.preco));
+                parent.variations.sort((a,b) => a.variationName.localeCompare(b.variationName));
+            } else {
+                parent.preco = 0; // Fallback, caso não haja variações
+            }
+        });
+        
         const combined = [...Object.values(parents), ...standalone];
         combined.sort((a,b) => a.nome.localeCompare(b.nome));
         return combined;
     }, [products, activeCategory, searchTerm]);
+    // FIM DA ALTERAÇÃO
 
     const handleFilterCategory = (category) => {
         setActiveCategory(category);

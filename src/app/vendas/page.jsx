@@ -325,19 +325,15 @@ export default function VendasPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] p-4 sm:p-6 lg:p-8 font-sans">
       <div className="max-w-7xl mx-auto">
-        {/* ... (Cabeçalho permanece o mesmo) ... */}
+        
+        {/* ===== INÍCIO DA ALTERAÇÃO ===== */}
+        {/* Cabeçalho com o botão "Taxas" REMOVIDO daqui */}
         <div className="mb-6 flex items-center justify-between">
            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
             <ShoppingBag size={32} /> Relatório de Vendas
           </h1>
           <div className="flex items-center gap-4">
-            <button
-                onClick={openTaxasModal}
-                title="Configurar Taxas de Pagamento"
-                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-            >
-                <Settings size={18} /> Taxas
-            </button>
+            {/* O botão "Taxas" foi movido para junto dos botões de exportação */}
             <Link href="/">
               <button className="flex items-center gap-2 px-4 py-2 bg-[#A16207] text-white rounded-lg font-semibold hover:bg-[#8f5606] transition-colors">
                 <ArrowLeft size={18} /> Voltar
@@ -346,7 +342,7 @@ export default function VendasPage() {
           </div>
         </div>
 
-        {/* ... (Filtros e Botões de Ação permanecem os mesmos) ... */}
+        {/* Filtros e Botões de Ação */}
         <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg">
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div>
@@ -371,6 +367,8 @@ export default function VendasPage() {
                     </button>
                 </div>
             </div>
+             
+             {/* Botão "Taxas" ADICIONADO aqui */}
              <div className="mt-4 flex flex-wrap justify-end gap-3">
                 <button
                     onClick={handlePrintCostReport}
@@ -379,6 +377,13 @@ export default function VendasPage() {
                     title="Gerar relatório detalhado para impressão ou salvar como PDF (formato A4)"
                 >
                     <Printer size={18} /> Gerar PDF/Imprimir
+                </button>
+                <button
+                    onClick={openTaxasModal}
+                    title="Configurar Taxas de Pagamento"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                >
+                    <Settings size={18} /> Taxas
                 </button>
                  <button
                     onClick={handleExportXLSX}
@@ -390,6 +395,8 @@ export default function VendasPage() {
                 </button>
             </div>
         </div>
+        {/* ===== FIM DA ALTERAÇÃO ===== */}
+
 
         {/* ... (Resumo Financeiro permanece o mesmo, ele mostra os TOTAIS do filtro, não da página) ... */}
         <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -558,7 +565,7 @@ export default function VendasPage() {
                                             <span className="text-gray-500 sm:text-sm">%</span>
                                         </div>
                                     </div>
-                                Vendas</div>
+                                </div>
                             ))}
                         </div>
                     )}
