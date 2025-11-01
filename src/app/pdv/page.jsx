@@ -648,7 +648,7 @@ export default function PdvPage() {
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
                     <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">
                         <CheckCircle size={50} className="text-green-500 mx-auto mb-4" />
-                        <h2 className="text-xl font-bold mb-2">Venda finalizada com sucesso!</h2>
+                        <h2 className="text-xl font-bold mb-2  text-gray-800">Venda finalizada com sucesso!</h2>
                         <div className="flex flex-col gap-3 mt-6">
                             <button 
                                 onClick={handlePrintLastReceipt}

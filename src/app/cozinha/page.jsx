@@ -449,8 +449,8 @@ export default function CozinhaPage() {
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
                     <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">
                         <CheckCircle size={50} className="text-green-500 mx-auto mb-4" />
-                        <h2 className="text-xl font-bold mb-2">Pedido Pago com Sucesso!</h2>
-                        <button onClick={() => setIsSuccessModalOpen(false)} className="mt-4 px-6 py-2 bg-gray-200 rounded-lg font-semibold hover:bg-gray-300">
+                        <h2 className="text-xl font-bold mb-2  text-gray-800">Pedido Pago com Sucesso!</h2>
+                        <button onClick={() => setIsSuccessModalOpen(false)} className="mt-4 px-6 py-2 bg-gray-200 rounded-lg font-semibold hover:bg-gray-300  text-gray-800">
                             Fechar
                         </button>
                     </div>

@@ -386,19 +386,19 @@ export default function EstoquePage() {
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg">
-            <h2 className="text-2xl font-bold mb-6">{editingProduct ? 'Editar Produto' : 'Adicionar Novo Produto'}</h2>
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">{editingProduct ? 'Editar Produto' : 'Adicionar Novo Produto'}</h2>
             <form onSubmit={handleFormSubmit}>
-              <div className="mb-4">
+              <div className="mb-4 text-gray-800">
                 <label className="block text-gray-700 mb-2">Nome do Produto (use "Principal: Variação")</label>
                 <input type="text" value={newProduct.nome} onChange={(e) => setNewProduct({ ...newProduct, nome: e.target.value })} className="w-full p-2 border rounded" required />
               </div>
-              <div className="mb-4">
+              <div className="mb-4 text-gray-800">
                 <label className="block text-gray-700 mb-2">Descrição</label>
                 <textarea value={newProduct.descricao} onChange={(e) => setNewProduct({ ...newProduct, descricao: e.target.value })} className="w-full p-2 border rounded" rows="2" placeholder="Ex: Pão baguete selado, carne desfiada..."></textarea>
               </div>
-              <div className="mb-4">
+              <div className="mb-4  text-gray-800">
                 <label className="block text-gray-700 mb-2">Categoria</label>
-                <select value={newProduct.categoria} onChange={(e) => setNewProduct({ ...newProduct, categoria: e.target.value })} className="w-full p-2 border rounded" required >
+                <select value={newProduct.categoria} onChange={(e) => setNewProduct({ ...newProduct, categoria: e.target.value })} className="w-full p-2 border rounded  text-gray-800" required >
                     <option value="Lanches">Lanches</option>
                     <option value="Supremo Grill">Supremo Grill</option>
                     <option value="Bebidas Especiais">Bebidas Especiais</option>
@@ -408,19 +408,19 @@ export default function EstoquePage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div>
                   <label className="block text-gray-700 mb-2">Custo (R$)</label>
-                  <input type="number" step="0.01" value={newProduct.preco_custo} onChange={(e) => setNewProduct({ ...newProduct, preco_custo: e.target.value })} className="w-full p-2 border rounded" required />
+                  <input type="number" step="0.01" value={newProduct.preco_custo} onChange={(e) => setNewProduct({ ...newProduct, preco_custo: e.target.value })} className="w-full p-2 border rounded  text-gray-800" required />
                 </div>
                 <div>
                   <label className="block text-gray-700 mb-2">Venda (R$)</label>
-                  <input type="number" step="0.01" value={newProduct.preco} onChange={(e) => setNewProduct({ ...newProduct, preco: e.target.value })} className="w-full p-2 border rounded" required />
+                  <input type="number" step="0.01" value={newProduct.preco} onChange={(e) => setNewProduct({ ...newProduct, preco: e.target.value })} className="w-full p-2 border rounded  text-gray-800" required />
                 </div>
                 <div>
                   <label className="block text-gray-700 mb-2">Estoque</label>
-                  <input type="number" value={newProduct.quantidade_estoque} onChange={(e) => setNewProduct({ ...newSocial, quantidade_estoque: e.target.value })} className="w-full p-2 border rounded" required />
+                  <input type="number" value={newProduct.quantidade_estoque} onChange={(e) => setNewProduct({ ...newSocial, quantidade_estoque: e.target.value })} className="w-full p-2 border rounded  text-gray-800" required />
                 </div>
               </div>
               <div className="flex justify-end gap-4">
-                <button type="button" onClick={closeModal} className="px-4 py-2 bg-gray-200 rounded-lg">Cancelar</button>
+                <button type="button" onClick={closeModal} className="px-4 py-2 bg-gray-200 rounded-lg  text-gray-800">Cancelar</button>
                 <button type="submit" className="px-4 py-2 bg-[#A16207] text-white rounded-lg">{editingProduct ? 'Salvar Alterações' : 'Adicionar'}</button>
               </div>
             </form>
@@ -431,7 +431,7 @@ export default function EstoquePage() {
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm text-center">
-            <XCircle size={50} className="text-red-500 mx-auto mb-4" />
+            <XCircle size={50} className="text-red-500 mx-auto mb-4 " />
             <h2 className="text-xl font-bold mb-2">Confirmar Exclusão</h2>
             <p className="text-gray-600 mb-6">Tem certeza que quer excluir "{productToDelete?.nome}"? Esta ação não pode ser desfeita.</p>
             <div className="flex justify-center gap-4">
@@ -445,7 +445,7 @@ export default function EstoquePage() {
       {notification.show && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm text-center">
-            <CheckCircle size={50} className="text-green-500 mx-auto mb-4" />
+            <CheckCircle size={50} className="text-green-500 mx-auto mb-4 " />
             <h2 className="text-xl font-bold text-gray-900 mb-2">Sucesso!</h2>
             <p className="text-gray-700 mb-6">{notification.message}</p>
             <button onClick={() => setNotification({ show: false, message: '' })} className="mt-4 px-6 py-2 bg-[#A16207] text-white rounded-lg font-semibold">
