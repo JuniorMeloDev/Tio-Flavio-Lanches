@@ -14,16 +14,20 @@ self.addEventListener('push', (event) => {
     tag: 'novo-pedido'
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
-
-  // Envia mensagem para a aba aberta (para tocar som local)
-  event.waitUntil(
-    self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clientsArr => {
+  // Combinamos as duas ações (mostrar notificação E enviar mensagem) em um único Promise
+  const notificationPromise = self.registration.showNotification(title, options);
+  
+  const postMessagePromise = self.clients.matchAll({ 
+    includeUncontrolled: true, 
+    type: 'window' 
+  }).then(clientsArr => {
       for (const client of clientsArr) {
         client.postMessage({ type: 'NEW_ORDER', payload });
       }
-    })
-  );
+  });
+
+  // Aguardamos as duas promessas terminarem
+  event.waitUntil(Promise.all([notificationPromise, postMessagePromise]));
 });
 
 self.addEventListener('notificationclick', (event) => {
