@@ -1,8 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-// 1. Adicionar Loader2 e XCircle (para o modal)
-import { ArrowLeft, ChefHat, Check, CookingPot, XCircle, Copy, CheckCircle, DollarSign, Ban, Loader2, Trash2 } from 'lucide-react';
+// 1. Adicionado Volume2 e VolumeX
+import { 
+    ArrowLeft, ChefHat, Check, CookingPot, XCircle, Copy, CheckCircle, 
+    DollarSign, Ban, Loader2, Trash2, Volume2, VolumeX 
+} from 'lucide-react';
+
 // --- Funções para gerar o Payload do PIX (BR Code) ---
 // ... (código crc16, formatField, generatePixPayload sem alterações) ...
 const crc16 = (payload) => {
@@ -64,22 +68,27 @@ export default function CozinhaPage() {
     const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
     const qrCanvasRef = useRef(null);
 
-    // 2. Renomear estados de "Cancelar" para "Excluir"
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [orderToDelete, setOrderToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteError, setDeleteError] = useState('');
 
-    // --- Estados para pagamento em Dinheiro ---
     const [amountReceived, setAmountReceived] = useState('');
     const [changeDue, setChangeDue] = useState(0);
+
+    // 2. ADICIONADO: Estados de áudio e notificação
+    const [soundEnabled, setSoundEnabled] = useState(true);
+    const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
+    const audioRef = useRef(null);
+    const isPlaying = useRef(false);
 
     const PIX_KEY = process.env.NEXT_PUBLIC_PIX_KEY || '';
     const PIX_MERCHANT_NAME = process.env.NEXT_PUBLIC_PIX_MERCHANT_NAME;
     const PIX_MERCHANT_CITY = process.env.NEXT_PUBLIC_PIX_MERCHANT_CITY;
 
-    // --- useEffects (QR Code, Fetch Pedidos) ---
-    // ... (useEffect de 'qrious-cdn' sem alterações) ...
+    // --- useEffects ---
+    
+    // (useEffect de 'qrious-cdn' sem alterações)
     useEffect(() => {
         const scriptId = 'qrious-cdn';
         if (!document.getElementById(scriptId)) {
@@ -90,7 +99,8 @@ export default function CozinhaPage() {
         document.body.appendChild(script);
         }
     }, []);
-    // ... (useEffect de generatePixPayload sem alterações) ...
+    
+    // (useEffect de generatePixPayload sem alterações)
     useEffect(() => {
         if (isPaymentModalOpen && selectedPaymentMethod === 'Pix' && qrCanvasRef.current && window.QRious && orderToPay) {
             const payload = generatePixPayload(PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY, orderToPay.valor_total);
@@ -105,7 +115,7 @@ export default function CozinhaPage() {
         }
     }, [isPaymentModalOpen, selectedPaymentMethod, orderToPay, PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY]);
     
-    // ... (copyToClipboard, fetchPedidos, useEffect de fetchPedidos, memos de pedidos sem alterações) ...
+    // (copyToClipboard sem alterações)
     const copyToClipboard = () => {
         navigator.clipboard.writeText(pixPayload).then(() => {
         setCopySuccess('Copiado!');
@@ -115,12 +125,24 @@ export default function CozinhaPage() {
         });
     };
 
+    // 3. MODIFICADO: fetchPedidos agora para o alarme se não houver pedidos novos
     const fetchPedidos = async () => {
         try {
             const res = await fetch('/api/vendas/cozinha');
             if (!res.ok) throw new Error("Falha ao buscar pedidos da API.");
             const data = await res.json();
-            setPedidos(Array.isArray(data) ? data : []);
+            const pedidosAtuais = Array.isArray(data) ? data : [];
+            setPedidos(pedidosAtuais);
+
+            // Lógica para parar o alarme
+            const pedidosRecebidosCount = pedidosAtuais.filter(p => p.status === 'Recebido').length;
+            if (pedidosRecebidosCount === 0 && isPlaying.current && audioRef.current) {
+                console.log('COZINHA: Parando alarme, sem pedidos recebidos.');
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+                isPlaying.current = false;
+            }
+
         } catch (error) {
             console.error("Erro ao buscar pedidos:", error);
             setPedidos([]); // Define como array vazio em caso de erro
@@ -129,18 +151,106 @@ export default function CozinhaPage() {
         }
     };
 
+    // (useEffect de fetchPedidos (polling) sem alterações)
     useEffect(() => {
         fetchPedidos();
         const interval = setInterval(fetchPedidos, 15000); // Atualiza a cada 15 segundos
         return () => clearInterval(interval);
     }, []);
 
+    // 4. ADICIONADO: Effects de áudio e Service Worker para notificações instantâneas
+    
+    // 🔊 Carrega o áudio
+    useEffect(() => {
+        audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg');
+        audioRef.current.loop = true; // O alarme deve ser contínuo
+        audioRef.current.volume = 1.0;
+    }, []);
+
+    // 👂 Desbloqueia o áudio na primeira interação
+    useEffect(() => {
+        const unlockAudio = () => {
+            if (!isAudioUnlocked && audioRef.current) {
+                audioRef.current.play().then(() => {
+                    audioRef.current.pause();
+                    audioRef.current.currentTime = 0;
+                    setIsAudioUnlocked(true);
+                    console.log("Áudio (Cozinha) desbloqueado.");
+                    window.removeEventListener('click', unlockAudio, true);
+                }).catch(() => {});
+            }
+        };
+        window.addEventListener('click', unlockAudio, true);
+        return () => window.removeEventListener('click', unlockAudio, true);
+    }, [isAudioUnlocked]);
+    
+    // 🚀 Efeito para Service Worker e Notificações Push
+    useEffect(() => {
+        async function initPush() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+            const reg = await navigator.serviceWorker.register('/sw.js');
+            if (Notification.permission === 'default') await Notification.requestPermission();
+            if (Notification.permission !== 'granted') return;
+
+            const res = await fetch('/api/push/vapid');
+            const { publicKey } = await res.json();
+            const convertedKey = urlBase64ToUint8Array(publicKey);
+
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedKey,
+            });
+
+            await fetch('/api/push/subscribe', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(sub),
+            });
+            
+            console.log('Push (Cozinha) registrado!');
+        }
+
+        initPush();
+
+        // 🎧 Ouvinte de mensagens do Service Worker
+        const handlePushMessage = (e) => {
+            if (e.data?.type === 'NEW_ORDER') {
+                console.log('COZINHA: Novo pedido recebido via Service Worker!');
+                
+                // 1. Toca o som (se habilitado)
+                if (soundEnabled && isAudioUnlocked && audioRef.current) {
+                    audioRef.current.loop = true;
+                    audioRef.current.play().catch((err) => { console.warn("Falha ao tocar alarme:", err); });
+                    isPlaying.current = true;
+                }
+                // 2. Busca pedidos imediatamente
+                fetchPedidos();
+            }
+        };
+        
+        navigator.serviceWorker.addEventListener('message', handlePushMessage);
+
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = atob(base64);
+            return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+        }
+
+        // Limpeza
+        return () => {
+            navigator.serviceWorker.removeEventListener('message', handlePushMessage);
+        };
+    }, [soundEnabled, isAudioUnlocked]); // Dependências
+
+    // (memos de pedidos sem alterações)
     const pedidosRecebidos = useMemo(() => pedidos.filter(p => p.status === 'Recebido'), [pedidos]);
     const pedidosEmProducao = useMemo(() => pedidos.filter(p => p.status === 'Em Produção'), [pedidos]);
 
 
     // --- Funções de manipulação de estado e API ---
-    // 3. Remover a lógica de "Cancelado" desta função
+
+    // 5. MODIFICADO: handleUpdateStatus agora para o alarme
     const handleUpdateStatus = async (pedidoId, newStatus, paymentMethod = null) => {
         try {
             let bodyData = { id: pedidoId, status: newStatus };
@@ -159,13 +269,24 @@ export default function CozinhaPage() {
             }
 
             // Atualiza o estado local
+            let pedidosAtualizados;
             if (newStatus === 'Pago') { // Apenas 'Pago' remove da lista agora
-                setPedidos(currentPedidos => currentPedidos.filter(p => p.id !== pedidoId));
+                pedidosAtualizados = pedidos.filter(p => p.id !== pedidoId);
                 setIsSuccessModalOpen(true);
             } else { // Atualiza para 'Em Produção'
-                setPedidos(currentPedidos => currentPedidos.map(p =>
+                pedidosAtualizados = pedidos.map(p =>
                     p.id === pedidoId ? { ...p, status: newStatus } : p
-                ));
+                );
+            }
+            setPedidos(pedidosAtualizados);
+
+            // Lógica para parar o alarme
+            const pedidosRecebidosCount = pedidosAtualizados.filter(p => p.status === 'Recebido').length;
+            if (pedidosRecebidosCount === 0 && isPlaying.current && audioRef.current) {
+                console.log('COZINHA: Parando alarme, último pedido iniciado.');
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+                isPlaying.current = false;
             }
 
         } catch (error) {
@@ -174,7 +295,7 @@ export default function CozinhaPage() {
         }
     };
 
-    // ... (openPaymentModal, handleAmountReceivedChange, handleConfirmPayment sem alterações) ...
+    // (openPaymentModal, handleAmountReceivedChange, handleConfirmPayment sem alterações)
     const openPaymentModal = (pedido) => {
         setOrderToPay(pedido);
         setSelectedPaymentMethod('Dinheiro'); 
@@ -233,7 +354,19 @@ export default function CozinhaPage() {
         setOrderToPay(null);
     };
     
-    // 4. Adicionar funções para controlar o modal de EXCLUSÃO
+    // 6. ADICIONADO: Função para controlar o som
+    const handleToggleSound = () => {
+        const isEnabling = !soundEnabled;
+        setSoundEnabled(isEnabling);
+        console.log(`Som da Cozinha ${isEnabling ? 'ATIVADO' : 'DESATIVADO'}.`);
+        if (!isEnabling && audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            isPlaying.current = false;
+        }
+    };
+
+    // (funções do modal de exclusão sem alterações)
     const openDeleteModal = (pedido) => {
         setOrderToDelete(pedido);
         setDeleteError('');
@@ -245,7 +378,6 @@ export default function CozinhaPage() {
         setIsDeleteModalOpen(false);
     };
 
-    // 5. Adicionar a função que REALMENTE EXCLUI
     const handleDeleteConfirm = async () => {
         if (!orderToDelete) return;
         
@@ -253,7 +385,6 @@ export default function CozinhaPage() {
         setDeleteError('');
 
         try {
-            // Chama a API de exclusão permanente
             const res = await fetch(`/api/vendas/${orderToDelete.id}`, {
                 method: 'DELETE',
             });
@@ -264,7 +395,6 @@ export default function CozinhaPage() {
                 throw new Error(responseData.message || "Falha ao excluir o pedido.");
             }
 
-            // Sucesso: remover da lista local e fechar modal
             setPedidos(currentPedidos => currentPedidos.filter(p => p.id !== orderToDelete.id));
             closeDeleteModal();
 
@@ -277,6 +407,7 @@ export default function CozinhaPage() {
 
 
     // --- Componente PedidoCard ---
+    // (PedidoCard sem alterações)
     const PedidoCard = ({ pedido }) => {
 
         const handleProntoClick = () => {
@@ -295,7 +426,6 @@ export default function CozinhaPage() {
                             <p className="text-sm text-gray-600">Pedido #{pedido.id}</p>
                             <p className="font-bold text-xl text-gray-900">{pedido.nome_cliente}</p>
                         </div>
-                        {/* 6. Atualizar o botão para chamar openDeleteModal */}
                         <div className="flex items-center gap-2">
                             <span className={`text-xs font-semibold px-2 py-1 rounded-full ${pedido.status === 'Recebido' ? 'bg-orange-200 text-orange-800' : 'bg-blue-200 text-blue-800'}`}>
                                 {pedido.status}
@@ -309,7 +439,6 @@ export default function CozinhaPage() {
                         </button>
                         </div>
                     </div>
-                    {/* ... (ul de itens, total, botões de ação sem alterações) ... */}
                     <ul className="space-y-2 mb-4">
                         {pedido.itens_venda && pedido.itens_venda.map((item, index) => (
                             <li key={index} className="flex justify-between items-center text-gray-800">
@@ -346,7 +475,18 @@ export default function CozinhaPage() {
     // --- JSX Principal da Página ---
     return (
         <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] p-4 sm:p-6 lg:p-8 font-sans">
-            {/* ... (cabeçalho, loading, seções de pedidos sem alterações) ... */}
+            
+            {/* 7. ADICIONADO: Botão de som */}
+            <div className="absolute top-4 right-4 z-20">
+                <button
+                    onClick={handleToggleSound}
+                    className={`p-3 rounded-full text-white transition-colors ${soundEnabled ? 'bg-green-600/50' : 'bg-red-600/50'}`}
+                    title={soundEnabled ? "Desativar som" : "Ativar som"}
+                >
+                    {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                </button>
+            </div>
+
             <div className="max-w-7xl mx-auto">
                  <div className="mb-6 flex items-center justify-between">
                     <h1 className="text-3xl font-bold text-white flex items-center gap-3">
@@ -387,11 +527,9 @@ export default function CozinhaPage() {
             </div>
 
             {/* --- Modal de Pagamento Aprimorado --- */}
-            {/* ... (Modal 'isPaymentModalOpen' sem alterações) ... */}
             {isPaymentModalOpen && orderToPay && (
               <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
                 <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm m-4 max-h-[90vh] overflow-y-auto">
-                  {/* ... (conteúdo do modal de pagamento) ... */}
                    <h2 className="text-2xl font-bold mb-2 text-center">Finalizar Pedido #{orderToPay.id}</h2>
                   <p className="text-center text-xl font-semibold text-gray-800 mb-6">
                     Total: {Number(orderToPay.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -453,7 +591,15 @@ export default function CozinhaPage() {
                   )}
                   {selectedPaymentMethod === 'Pix' && (
                       <div className="text-center border-t pt-4 animate-fade-in">
-                          {/* ... (pix) ... */}
+                          <p className="font-semibold mb-2 text-gray-800">PIX ({orderToPay.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})</p>
+                          <canvas ref={qrCanvasRef} className="mx-auto border"></canvas>
+                          <p className="text-sm mt-2 text-gray-600">Ou use a chave "Copia e Cola":</p>
+                          <div className="mt-1 flex items-center justify-between p-2 bg-gray-100 rounded-lg w-full">
+                              <span className="text-gray-800 font-mono text-xs mr-2 overflow-hidden whitespace-nowrap text-ellipsis max-w-[calc(100%-40px)]">{pixPayload}</span>
+                              <button onClick={copyToClipboard} className="bg-gray-200 p-1 rounded-md hover:bg-gray-300">
+                                  {copySuccess ? <CheckCircle size={16} className="text-green-600"/> : <Copy size={16} />}
+                              </button>
+                          </div>
                       </div>
                   )}
                   <div className="flex justify-end gap-3 mt-6 border-t pt-4">
@@ -471,7 +617,6 @@ export default function CozinhaPage() {
             )}
 
             {/* --- Modais de Sucesso e Erro --- */}
-            {/* ... (Modal 'isSuccessModalOpen' sem alterações) ... */}
             {isSuccessModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
                     <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">
@@ -483,7 +628,6 @@ export default function CozinhaPage() {
                     </div>
                 </div>
             )}
-            {/* ... (Modal 'errorMessage' sem alterações) ... */}
             {errorMessage && (
               <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
                   <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">
@@ -497,7 +641,7 @@ export default function CozinhaPage() {
               </div>
             )}
 
-            {/* 7. Adicionar o JSX do modal de confirmação de EXCLUSÃO */}
+            {/* --- Modal de Exclusão --- */}
             {isDeleteModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
               <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">
