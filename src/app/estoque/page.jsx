@@ -416,7 +416,7 @@ export default function EstoquePage() {
                 </div>
                 <div>
                   <label className="block text-gray-700 mb-2">Estoque</label>
-                  <input type="number" value={newProduct.quantidade_estoque} onChange={(e) => setNewProduct({ ...newSocial, quantidade_estoque: e.target.value })} className="w-full p-2 border rounded  text-gray-800" required />
+                  <input type="number" value={newProduct.quantidade_estoque} onChange={(e) => setNewProduct({ ...newProduct, quantidade_estoque: e.target.value })} className="w-full p-2 border rounded  text-gray-800" required />
                 </div>
               </div>
               <div className="flex justify-end gap-4">

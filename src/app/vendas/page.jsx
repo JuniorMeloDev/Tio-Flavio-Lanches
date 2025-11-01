@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 // Adiciona a importação do SheetJS (xlsx)
 import * as XLSX from 'xlsx';
-import { ShoppingBag, Calendar, CreditCard, ArrowLeft, Printer, X, Settings, Loader2, Save, FileText, AlertCircle, Download } from 'lucide-react'; // Ícones adicionados
+import { ShoppingBag, Calendar, CreditCard, ArrowLeft, Printer, X, Settings, Loader2, Save, FileText, AlertCircle, Download, Trash2 } from 'lucide-react'; // Ícones adicionados
 
 // ... (A função generateAndPrintReceipt permanece a mesma) ...
 const generateAndPrintReceipt = (venda) => {
@@ -163,12 +163,16 @@ export default function VendasPage() {
   const [taxasError, setTaxasError] = useState('');
   const [taxasSuccess, setTaxasSuccess] = useState('');
 
-  // NOVO: Estados de paginação
+  // Estados de paginação
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10); // 10 itens por página
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // ... (Funções de Taxas permanecem as mesmas) ...
-  // --- Funções de Taxas ---
+  // Estados para o modal de exclusão
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [vendaToDelete, setVendaToDelete] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
+
+  // Funções de Taxas
   const fetchTaxas = async () => {
     setIsLoadingTaxas(true); setTaxasError('');
     try {
@@ -197,10 +201,9 @@ export default function VendasPage() {
     setEditableTaxas(prev => ({ ...prev, [method]: sanitizedValue }));
   };
   const openTaxasModal = () => { fetchTaxas(); setIsTaxasModalOpen(true); };
-  // -------------------------
-
-  useEffect(() => {
-    async function fetchVendas() {
+  
+  // Função para buscar vendas
+  async function fetchVendas() {
       setError(null); setLoading(true);
       try {
         const response = await fetch('/api/vendas');
@@ -209,20 +212,23 @@ export default function VendasPage() {
       } catch (err) { setError(err.message); }
       finally { setLoading(false); }
     }
+
+  useEffect(() => {
     fetchVendas();
   }, []);
 
-  // ATUALIZADO: Handlers de filtro agora resetam a página
+  // Handlers de filtro e paginação
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFilters(prev => ({ ...prev, [name]: value }));
-    setCurrentPage(1); // Reseta para a página 1
+    setCurrentPage(1);
   };
   const clearFilters = () => {
     setFilters({ startDate: '', endDate: '', minValor: '', maxValor: '' });
-    setCurrentPage(1); // Reseta para a página 1
+    setCurrentPage(1);
   };
 
+  // Memos para processar dados
   const filteredVendas = useMemo(() => {
     return allVendas.filter(venda => {
             const vendaDate = new Date(venda.criado_em);
@@ -244,7 +250,6 @@ export default function VendasPage() {
   }, [allVendas, filters]);
 
   const totaisPeriodo = useMemo(() => {
-    // Totais são calculados com base em TODAS as vendas filtradas, não apenas as paginadas
     return filteredVendas.reduce((acc, venda) => {
         acc.receitaBruta += venda.valor_total;
         acc.custoProdutos += venda.custoProdutosCalculado;
@@ -254,19 +259,17 @@ export default function VendasPage() {
     }, { receitaBruta: 0, custoProdutos: 0, custoPagamento: 0, lucroBruto: 0 });
   }, [filteredVendas]);
 
-  // NOVO: Memo para calcular o total de páginas
   const totalPages = useMemo(() => {
       return Math.ceil(filteredVendas.length / itemsPerPage);
   }, [filteredVendas.length, itemsPerPage]);
 
-  // NOVO: Memo para "fatiar" as vendas para a página atual
   const paginatedVendas = useMemo(() => {
       const startIndex = (currentPage - 1) * itemsPerPage;
       const endIndex = startIndex + itemsPerPage;
       return filteredVendas.slice(startIndex, endIndex);
   }, [filteredVendas, currentPage, itemsPerPage]);
 
-
+  // Funções de Ação (Imprimir, Exportar, Excluir)
   const handlePrintReceipt = async (saleId) => {
     if (!saleId) return;
     try {
@@ -285,7 +288,6 @@ export default function VendasPage() {
     generateAndPrintCostReport(filteredVendas, totaisPeriodo, filters);
   };
 
-  // ... (A função handleExportXLSX permanece a mesma) ...
   const handleExportXLSX = () => {
         if (filteredVendas.length === 0) { alert("Nenhuma venda encontrada para exportar."); return; }
         const dataToExport = filteredVendas.map(v => ({
@@ -321,19 +323,56 @@ export default function VendasPage() {
         const fileName = `Relatorio_Vendas_Custos${dataFiltro}.xlsx`;
         XLSX.writeFile(wb, fileName);
   };
+  
+  // Funções do Modal de Exclusão
+  const openDeleteModal = (venda) => {
+    setVendaToDelete(venda);
+    setDeleteError('');
+    setIsDeleteModalOpen(true);
+  };
+  
+  const closeDeleteModal = () => {
+    setVendaToDelete(null);
+    setIsDeleteModalOpen(false);
+  };
+  
+  const handleDeleteConfirm = async () => {
+    if (!vendaToDelete) return;
+    setLoading(true); // Reutiliza o loading principal
+    setDeleteError('');
+    
+    try {
+      const res = await fetch(`/api/vendas/${vendaToDelete.id}`, {
+        method: 'DELETE',
+      });
+      
+      const responseData = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(responseData.message || "Falha ao excluir a venda.");
+      }
+      
+      // Sucesso
+      closeDeleteModal();
+      await fetchVendas(); // Recarrega os dados
+      
+    } catch (err) {
+      setDeleteError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] p-4 sm:p-6 lg:p-8 font-sans">
       <div className="max-w-7xl mx-auto">
         
-        {/* ===== INÍCIO DA ALTERAÇÃO ===== */}
-        {/* Cabeçalho com o botão "Taxas" REMOVIDO daqui */}
         <div className="mb-6 flex items-center justify-between">
            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
             <ShoppingBag size={32} /> Relatório de Vendas
           </h1>
           <div className="flex items-center gap-4">
-            {/* O botão "Taxas" foi movido para junto dos botões de exportação */}
             <Link href="/">
               <button className="flex items-center gap-2 px-4 py-2 bg-[#A16207] text-white rounded-lg font-semibold hover:bg-[#8f5606] transition-colors">
                 <ArrowLeft size={18} /> Voltar
@@ -342,7 +381,6 @@ export default function VendasPage() {
           </div>
         </div>
 
-        {/* Filtros e Botões de Ação */}
         <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg">
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                 <div>
@@ -368,7 +406,6 @@ export default function VendasPage() {
                 </div>
             </div>
              
-             {/* Botão "Taxas" ADICIONADO aqui */}
              <div className="mt-4 flex flex-wrap justify-end gap-3">
                 <button
                     onClick={handlePrintCostReport}
@@ -395,10 +432,8 @@ export default function VendasPage() {
                 </button>
             </div>
         </div>
-        {/* ===== FIM DA ALTERAÇÃO ===== */}
 
 
-        {/* ... (Resumo Financeiro permanece o mesmo, ele mostra os TOTAIS do filtro, não da página) ... */}
         <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
              <div>
                 <p className="text-sm text-gray-300">Vendas Período</p>
@@ -425,14 +460,13 @@ export default function VendasPage() {
             </div>
         </div>
 
-        {/* Tabela de Vendas */}
         <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg overflow-hidden">
           <div className="overflow-x-auto">
-            {loading ? (
+            {loading && !isDeleteModalOpen ? (
               <p className="text-center text-gray-800 py-10 flex justify-center items-center gap-2"><Loader2 className="animate-spin" size={20}/> Carregando vendas...</p>
             ) : error ? (
               <p className="text-center text-red-500 py-10 flex justify-center items-center gap-2"><AlertCircle size={20} /> {error}</p>
-            ) : filteredVendas.length === 0 ? ( // Checa o total filtrado
+            ) : filteredVendas.length === 0 ? (
                <p className="text-center text-gray-800 py-10">Nenhuma venda encontrada para os filtros aplicados.</p>
             ) : (
               <table className="w-full text-left min-w-[800px]">
@@ -446,7 +480,6 @@ export default function VendasPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200/50">
-                  {/* ATUALIZADO: Mapeando as vendas paginadas */}
                   {paginatedVendas.map((venda) => (
                     <tr key={venda.id} className="hover:bg-black/10">
                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">#{venda.id}</td>
@@ -468,13 +501,22 @@ export default function VendasPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-center text-sm">
-                        <button
-                          onClick={() => handlePrintReceipt(venda.id)}
-                          className="text-[#A16207] hover:text-[#8f5606] p-1 rounded-full hover:bg-yellow-100 mx-auto"
-                          title="Imprimir Comprovante"
-                        >
-                          <Printer size={16} />
-                        </button>
+                        <div className="flex justify-center items-center gap-3">
+                            <button
+                              onClick={() => handlePrintReceipt(venda.id)}
+                              className="text-[#A16207] hover:text-[#8f5606] p-1 rounded-full hover:bg-yellow-100"
+                              title="Imprimir Comprovante"
+                            >
+                              <Printer size={16} />
+                            </button>
+                            <button
+                              onClick={() => openDeleteModal(venda)}
+                              className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100"
+                              title="Excluir Venda"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -483,10 +525,8 @@ export default function VendasPage() {
             )}
           </div>
 
-          {/* NOVO: Controles de Paginação */}
           {filteredVendas.length > 0 && totalPages > 1 && !loading && !error && (
             <div className="p-4 flex flex-col sm:flex-row justify-between items-center text-sm text-gray-700 bg-white/20 border-t border-gray-200/50">
-                {/* Seletor de Itens por Página */}
                 <div className="flex items-center gap-2 mb-2 sm:mb-0">
                     <label htmlFor="itemsPerPage" className="font-medium">Itens por página:</label>
                     <select
@@ -494,7 +534,7 @@ export default function VendasPage() {
                         value={itemsPerPage}
                         onChange={(e) => {
                             setItemsPerPage(Number(e.target.value));
-                            setCurrentPage(1); // Resetar para pág 1 ao mudar
+                            setCurrentPage(1);
                         }}
                         className="p-1 rounded-md border-gray-300 bg-white/50 text-gray-900 focus:ring-1 focus:ring-gray-400"
                     >
@@ -505,7 +545,6 @@ export default function VendasPage() {
                     </select>
                 </div>
                 
-                {/* Contagem e Botões */}
                 <div className="flex items-center gap-4">
                     <span>
                         Página <span className="font-bold">{currentPage}</span> de <span className="font-bold">{totalPages}</span>
@@ -532,8 +571,7 @@ export default function VendasPage() {
         </div>
       </div>
 
-       {/* ... (Modal de Taxas permanece o mesmo) ... */}
-        {isTaxasModalOpen && (
+       {isTaxasModalOpen && (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
                 <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
                     <div className="flex justify-between items-center mb-6">
@@ -589,6 +627,46 @@ export default function VendasPage() {
                             </button>
                         </div>
                     )}
+                </div>
+            </div>
+        )}
+        
+        {isDeleteModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Trash2 size={22}/> Confirmar Exclusão</h2>
+                        <button onClick={closeDeleteModal} className="text-gray-500 hover:text-gray-800"><X size={24} /></button>
+                    </div>
+                    
+                    <p className="text-gray-700 mb-4">
+                        Tem certeza que deseja excluir permanentemente a venda <strong>#{vendaToDelete?.id}</strong>?
+                    </p>
+                    <p className="text-sm text-red-600 bg-red-50 p-3 rounded-md mb-6">
+                        <strong>Atenção:</strong> Esta ação não pode ser desfeita. A exclusão desta venda NÃO irá restaurar o estoque dos produtos vendidos.
+                    </p>
+                    
+                    {deleteError && (
+                        <p className="text-center text-red-600 mb-4 p-2 bg-red-100 rounded">{deleteError}</p>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-4 border-t">
+                        <button
+                            onClick={closeDeleteModal}
+                            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                            disabled={loading}
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleDeleteConfirm}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center gap-2 disabled:opacity-50"
+                            disabled={loading}
+                        >
+                            {loading ? <Loader2 className="animate-spin" size={18}/> : <Trash2 size={18} />}
+                            Excluir Permanentemente
+                        </button>
+                    </div>
                 </div>
             </div>
         )}
