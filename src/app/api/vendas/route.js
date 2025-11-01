@@ -57,9 +57,29 @@ export async function POST(request) {
     });
     
     if (error) {
-        console.error('Erro ao chamar a função do Supabase (finalizar_venda):', error);
-        return new NextResponse(JSON.stringify({ message: error.message }), { status: 500 });
-    }
+  console.error('Erro ao chamar a função do Supabase (finalizar_venda):', error);
+  return new NextResponse(JSON.stringify({ message: error.message }), { status: 500 });
+}
 
-    return new NextResponse(JSON.stringify({ venda_id: data }), { status: 201 });
+// ✅ Venda criada com sucesso
+const vendaId = data;
+
+// 🔔 Dispara push
+try {
+  const payload = {
+    title: '🍔 Novo pedido recebido!',
+    body: `Pedido #${vendaId} criado e enviado para a cozinha.`,
+    url: '/cozinha'
+  };
+
+  await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/push/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+} catch (pushErr) {
+  console.error('Falha ao enviar notificação push:', pushErr);
+}
+
+return new NextResponse(JSON.stringify({ venda_id: vendaId }), { status: 201 });
 }

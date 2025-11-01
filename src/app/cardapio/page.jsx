@@ -243,6 +243,50 @@ export default function CardapioPage() {
 
   const categoryOrder = ['Lanches', 'Supremo Grill', 'Bebidas Especiais', 'Bebidas'];
 
+  useEffect(() => {
+  async function initPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    if (Notification.permission === 'default') await Notification.requestPermission();
+    if (Notification.permission !== 'granted') return;
+
+    const res = await fetch('/api/push/vapid');
+    const { publicKey } = await res.json();
+    const convertedKey = urlBase64ToUint8Array(publicKey);
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: convertedKey,
+    });
+
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub),
+    });
+
+    console.log('Push registrado com sucesso!');
+  }
+
+  initPush();
+
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'NEW_ORDER') {
+      // 🔊 Tocar som local (caso a aba esteja aberta)
+      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg');
+      audio.play().catch(() => {});
+    }
+  });
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+  }
+}, []);
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] font-sans p-4 sm:p-6 pb-28">
       <div className="max-w-2xl mx-auto">
