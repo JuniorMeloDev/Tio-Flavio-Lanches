@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react'; // Adicionado useCallback
 import Link from 'next/link';
 import { ShoppingCart, Archive, LineChart, QrCode, ChefHat, Volume2, VolumeX } from 'lucide-react';
 
@@ -14,7 +14,7 @@ export default function HomePage() {
   // 🔊 Carrega o áudio uma vez
   useEffect(() => {
     audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg');
-    audioRef.current.loop = true;
+    audioRef.current.loop = true; // Alarme toca em loop
     audioRef.current.volume = 1.0;
   }, []);
 
@@ -26,7 +26,7 @@ export default function HomePage() {
           audioRef.current.pause();
           audioRef.current.currentTime = 0;
           setIsAudioUnlocked(true);
-          console.log("Áudio desbloqueado pela interação do utilizador.");
+          console.log("Áudio (Home) desbloqueado pela interação do utilizador.");
           window.removeEventListener('click', unlockAudio, true);
         }).catch(() => {});
       }
@@ -47,7 +47,7 @@ export default function HomePage() {
   const handleToggleSound = () => {
     const isEnabling = !soundEnabled;
     setSoundEnabled(isEnabling);
-    console.log(`Som ${isEnabling ? 'ATIVADO' : 'DESATIVADO'} pelo utilizador.`);
+    console.log(`Som (Home) ${isEnabling ? 'ATIVADO' : 'DESATIVADO'} pelo utilizador.`);
 
     if (!isEnabling && audioRef.current) {
       audioRef.current.pause();
@@ -56,94 +56,120 @@ export default function HomePage() {
     }
   };
 
-  // 🕒 Checa pedidos e notifica
+  // 🕒 Função unificada para checar pedidos e notificar
+  // Usamos useCallback para que a função possa ser usada em múltiplos useEffects
+  const fetchPendingOrders = useCallback(async () => {
+    try {
+      const res = await fetch('/api/vendas/notificacoes');
+      if (!res.ok) throw new Error("Erro ao buscar notificações de pedidos");
+      const data = await res.json();
+      const currentOrderCount = Array.isArray(data) ? data.length : 0;
+
+      // 🚨 Novo pedido detectado (comparado ao estado anterior)
+      if (currentOrderCount > pendingOrders) {
+        console.log("HOME: Novo pedido detectado!");
+
+        // Envia notificação (Service Worker já faz isso, mas podemos garantir)
+        if (Notification.permission === 'granted') {
+          new Notification("🍔 Novo pedido recebido!", {
+            body: "Um novo pedido foi enviado para a cozinha.",
+            icon: "/Logo.png",
+          });
+        }
+
+        // Toca som se permitido
+        if (soundEnabled && isAudioUnlocked && audioRef.current && !isPlaying.current) {
+          audioRef.current.play().catch(e => console.warn("Falha ao tocar som:", e));
+          isPlaying.current = true;
+        }
+      }
+
+      // Para o som se não houver pedidos
+      if (currentOrderCount === 0 && isPlaying.current && audioRef.current) {
+        console.log("HOME: Parando alarme, sem pedidos recebidos.");
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        isPlaying.current = false;
+      }
+
+      setPendingOrders(currentOrderCount);
+    } catch (error) {
+      console.error("Erro ao buscar pedidos pendentes:", error);
+    }
+  }, [pendingOrders, soundEnabled, isAudioUnlocked]); // Depende desses estados
+
+  // 1. Efeito de Polling (Fallback)
+  // Verifica a cada 10 segundos, caso o Push falhe
   useEffect(() => {
-    const fetchPendingOrders = async () => {
+    fetchPendingOrders(); // Verifica ao carregar a página
+    const interval = setInterval(fetchPendingOrders, 10000); // Polling de fallback
+    return () => clearInterval(interval);
+  }, [fetchPendingOrders]); // Depende da função unificada
+
+  // 2. Efeito de Push (Gatilho Instantâneo)
+  // Registra o Service Worker e ouve mensagens instantâneas
+  useEffect(() => {
+    async function initPush() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
       try {
-        const res = await fetch('/api/vendas/notificacoes');
-        if (!res.ok) throw new Error("Erro ao buscar notificações de pedidos");
-        const data = await res.json();
-        const currentOrderCount = Array.isArray(data) ? data.length : 0;
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        if (Notification.permission === 'default') await Notification.requestPermission();
+        if (Notification.permission !== 'granted') return;
 
-        // 🚨 Novo pedido detectado
-        if (currentOrderCount > pendingOrders) {
-          console.log("Novo pedido detectado!");
-
-          // Envia notificação
-          if (Notification.permission === 'granted') {
-            new Notification("🍔 Novo pedido recebido!", {
-              body: "Um novo pedido foi enviado para a cozinha.",
-              icon: "/Logo.png",
-            });
-          }
-
-          // Toca som se permitido
-          if (soundEnabled && isAudioUnlocked && audioRef.current) {
-            audioRef.current.play().catch(e => console.warn("Falha ao tocar som:", e));
-            isPlaying.current = true;
-          }
+        const res = await fetch('/api/push/vapid');
+        const { publicKey } = await res.json();
+        
+        if (!publicKey) {
+          console.error('VAPID Public Key não recebida da API.');
+          return;
         }
 
-        // Para o som se não houver pedidos
-        if (currentOrderCount === 0 && isPlaying.current && audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          isPlaying.current = false;
-        }
+        const convertedKey = urlBase64ToUint8Array(publicKey);
 
-        setPendingOrders(currentOrderCount);
-      } catch (error) {
-        console.error("Erro ao buscar pedidos pendentes:", error);
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey,
+        });
+
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sub),
+        });
+
+        console.log('Push (Home) registrado com sucesso!');
+
+      } catch (err) {
+        console.error("Falha ao registrar Push (Home):", err.message);
+      }
+    }
+
+    initPush();
+
+    // Ouvinte de mensagem do Service Worker
+    const handlePushMessage = (e) => {
+      if (e.data?.type === 'NEW_ORDER') {
+        console.log('HOME: Push recebido, buscando pedidos instantaneamente.');
+        // Chama a mesma função do polling, mas de forma imediata
+        fetchPendingOrders();
       }
     };
+    
+    navigator.serviceWorker.addEventListener('message', handlePushMessage);
 
-    fetchPendingOrders();
-    const interval = setInterval(fetchPendingOrders, 10000);
-    return () => clearInterval(interval);
-  }, [pendingOrders, soundEnabled, isAudioUnlocked]);
-
-  useEffect(() => {
-  async function initPush() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    const reg = await navigator.serviceWorker.register('/sw.js');
-    if (Notification.permission === 'default') await Notification.requestPermission();
-    if (Notification.permission !== 'granted') return;
-
-    const res = await fetch('/api/push/vapid');
-    const { publicKey } = await res.json();
-    const convertedKey = urlBase64ToUint8Array(publicKey);
-
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: convertedKey,
-    });
-
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub),
-    });
-
-    console.log('Push registrado com sucesso!');
-  }
-
-  initPush();
-
-  navigator.serviceWorker.addEventListener('message', (e) => {
-    if (e.data?.type === 'NEW_ORDER') {
-      // 🔊 Tocar som local (caso a aba esteja aberta)
-      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg');
-      audio.play().catch(() => {});
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
     }
-  });
 
-  function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = atob(base64);
-    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
-  }
-}, []);
+    // Limpeza
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handlePushMessage);
+    };
+  }, [fetchPendingOrders]); // Depende da função unificada
 
 
   return (
