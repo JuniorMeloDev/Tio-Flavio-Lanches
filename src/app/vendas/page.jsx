@@ -249,14 +249,22 @@ export default function VendasPage() {
         }).sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em));
   }, [allVendas, filters]);
 
+  // MODIFICAÇÃO 1: Cálculo da margem de lucro adicionado
   const totaisPeriodo = useMemo(() => {
-    return filteredVendas.reduce((acc, venda) => {
+    const totais = filteredVendas.reduce((acc, venda) => {
         acc.receitaBruta += venda.valor_total;
         acc.custoProdutos += venda.custoProdutosCalculado;
         acc.custoPagamento += venda.custo_pagamento ?? 0;
         acc.lucroBruto += venda.lucroCalculado;
         return acc;
     }, { receitaBruta: 0, custoProdutos: 0, custoPagamento: 0, lucroBruto: 0 });
+
+    const margemLucro = (totais.receitaBruta > 0) 
+        ? (totais.lucroBruto / totais.receitaBruta) * 100 
+        : 0;
+        
+    return { ...totais, margemLucro };
+
   }, [filteredVendas]);
 
   const totalPages = useMemo(() => {
@@ -433,8 +441,8 @@ export default function VendasPage() {
             </div>
         </div>
 
-
-        <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+        {/* MODIFICAÇÃO 2: Alterado de md:grid-cols-4 para md:grid-cols-5 */}
+        <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
              <div>
                 <p className="text-sm text-gray-300">Vendas Período</p>
                 <p className="text-2xl font-bold text-white">{filteredVendas.length}</p>
@@ -456,6 +464,13 @@ export default function VendasPage() {
                 <p className="text-sm text-gray-300">Lucro Bruto</p>
                 <p className={`text-2xl font-bold ${totaisPeriodo.lucroBruto >= 0 ? 'text-green-300' : 'text-red-300'}`}>
                     {totaisPeriodo.lucroBruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </p>
+            </div>
+            {/* MODIFICAÇÃO 3: Novo card adicionado */}
+            <div>
+                <p className="text-sm text-gray-300">Margem Lucro (%)</p>
+                <p className={`text-2xl font-bold ${totaisPeriodo.lucroBruto >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                    {totaisPeriodo.margemLucro.toFixed(2)}%
                 </p>
             </div>
         </div>

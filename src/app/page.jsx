@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, Archive, LineChart, QrCode, ChefHat, Volume2, VolumeX, BellRing } from 'lucide-react';
+// Importar o ícone de Sair e a Server Action
+import { ShoppingCart, Archive, LineChart, QrCode, ChefHat, Volume2, VolumeX, BellRing, LogOut } from 'lucide-react';
+import { logout } from '@/app/auth/actions';
 
 export default function HomePage() {
   const [pendingOrders, setPendingOrders] = useState(0);
@@ -216,7 +218,9 @@ export default function HomePage() {
 
       {/* SEU CONTEÚDO DE PÁGINA EXISTENTE */}
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] p-4 font-sans">
-        <div className="absolute top-4 right-4">
+        
+        {/* Wrapper para botões no canto superior */}
+        <div className="absolute top-4 right-4 flex gap-3">
           <button
             onClick={handleToggleSound}
             className={`p-3 rounded-full text-white transition-colors ${soundEnabled ? 'bg-green-600/50' : 'bg-red-600/50'}`}
@@ -224,6 +228,16 @@ export default function HomePage() {
           >
             {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
+
+          {/* Botão de Sair (Logout) */}
+          <form action={logout}>
+            <button 
+              className="p-3 rounded-full text-white bg-red-600/50 hover:bg-red-500/50 transition-colors"
+              title="Sair do sistema"
+            >
+              <LogOut size={20} />
+            </button>
+          </form>
         </div>
 
         <div className="text-center mb-12">
@@ -285,5 +299,3 @@ export default function HomePage() {
     </>
   );
 }
-
-
