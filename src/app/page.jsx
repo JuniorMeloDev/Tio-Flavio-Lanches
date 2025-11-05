@@ -15,6 +15,7 @@ export default function HomePage() {
   
   const [showActivationModal, setShowActivationModal] = useState(true);
 
+  // ... (todo o resto do seu código, como useEffects e handlers, permanece igual) ...
   // 🔊 Carrega o áudio uma vez
   useEffect(() => {
     audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg');
@@ -255,10 +256,10 @@ export default function HomePage() {
           </a>
 
           {/* *** CORREÇÃO APLICADA AQUI ***
-            Adicionada a classe 'relative' de volta ao 'a' 
+            Movido o 'relative' do 'a' para o 'div' interno
           */}
-          <a href="/cozinha" className="block relative">
-            <div className={`flex flex-col items-center justify-center p-8 sm:p-10 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 cursor-pointer h-full border-2 ${pendingOrders > 0 ? 'animate-pulse border-red-500' : 'border-transparent hover:border-[#A16207]'}`}>
+          <a href="/cozinha" className="block">
+            <div className={`relative flex flex-col items-center justify-center p-8 sm:p-10 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 cursor-pointer h-full border-2 ${pendingOrders > 0 ? 'animate-pulse border-red-500' : 'border-transparent hover:border-[#A16207]'}`}>
               
               {pendingOrders > 0 && (
                 <div className="absolute -top-2 -right-2 w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-sm animate-pulse z-10">
