@@ -193,6 +193,7 @@ export default function PdvPage() {
     const [customerName, setCustomerName] = useState('');
     const [taxasPagamento, setTaxasPagamento] = useState({});
     const [isLoadingTaxas, setIsLoadingTaxas] = useState(true);
+    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
     const [discount, setDiscount] = useState('');
     const [lastSaleDataForReceipt, setLastSaleDataForReceipt] = useState(null);
@@ -383,6 +384,9 @@ export default function PdvPage() {
         if (selectedPaymentMethod === 'Dinheiro') {
             if (isNaN(amountReceivedNumber) || amountReceivedNumber < totalAfterDiscount) { setErrorMessage('O valor recebido é insuficiente ou inválido.'); return; }
         }
+        if (isProcessingPayment) return; 
+        setIsProcessingPayment(true);       
+
         const taxaPercentual = taxasPagamento[finalPaymentMethod] ?? 0;
         const custoPagamento = (totalAfterDiscount * (taxaPercentual / 100)).toFixed(2);
         
@@ -424,6 +428,8 @@ export default function PdvPage() {
         } catch (error) {
             setErrorMessage(error.message);
             setIsPaymentModalOpen(false);
+        } finally {
+        setIsProcessingPayment(false); // <--- GARANTE QUE O ESTADO SERÁ RESETADO
         }
     };
     
@@ -679,9 +685,10 @@ export default function PdvPage() {
                     <button onClick={() => setIsPaymentModalOpen(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">Cancelar</button>
                     <button onClick={handleConfirmPayment} 
                         className="px-4 py-2 bg-[#A16207] text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={isLoadingTaxas || (selectedPaymentMethod === 'Dinheiro' && (changeDue < 0 || amountReceived === ''))}
+                        disabled={isLoadingTaxas || (selectedPaymentMethod === 'Dinheiro' && (changeDue < 0 || amountReceived === '')) || isProcessingPayment}
                     >
                         Confirmar Pagamento
+                        {isProcessingPayment ? 'Processando...' : 'Confirmar Pagamento'}
                     </button>
                     </div>
                 </div>
