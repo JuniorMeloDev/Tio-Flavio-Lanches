@@ -38,16 +38,31 @@ export async function GET() {
 
 // PUT: Atualiza o estado de um pedido (pode ou não incluir método de pagamento)
 export async function PUT(request) {
-    const { id, status, metodo_pagamento } = await request.json();
+    // Adicionado "valor_total" e "desconto"
+    const { id, status, metodo_pagamento, valor_total, desconto } = await request.json();
 
     if (!id || !status) {
         return NextResponse.json({ message: 'ID do pedido e novo estado são obrigatórios.' }, { status: 400 });
     }
 
     let updateData = { status };
+    
     if (metodo_pagamento) {
         updateData.metodo_pagamento = metodo_pagamento;
     }
+
+    // --- BLOCO ADICIONADO ---
+    // Se o pagamento está sendo feito (status='Pago'), 
+    // atualizamos também o total (com desconto) e o valor do desconto.
+    if (status === 'Pago') {
+        if (valor_total !== undefined) {
+            updateData.valor_total = valor_total;
+        }
+        if (desconto !== undefined) {
+            updateData.desconto = desconto; 
+        }
+    }
+    // --- FIM DO BLOCO ---
 
     try {
         const { data, error } = await supabase

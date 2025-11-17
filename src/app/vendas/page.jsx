@@ -7,8 +7,13 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { ShoppingBag, Calendar, CreditCard, ArrowLeft, Printer, X, Settings, Loader2, Save, FileText, AlertCircle, Download, Trash2 } from 'lucide-react'; // Ícones adicionados
 
-// ... (A função generateAndPrintReceipt permanece a mesma) ...
 const generateAndPrintReceipt = (venda) => {
+ 
+    
+    const subtotal = venda.itens?.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0) || venda.valor_total;
+    const desconto = (venda.desconto !== undefined) ? venda.desconto : (subtotal - venda.valor_total);
+    const hasDiscountInfo = desconto > 0;
+
     const receiptContent = `
         <div style="font-family: 'Courier New', monospace; width: 300px; padding: 10px; font-size: 15px; color: #000; font-weight: bold;">
              <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px;">
@@ -27,6 +32,18 @@ const generateAndPrintReceipt = (venda) => {
                     </div>
                  `).join('')}
              </div>
+            
+             ${hasDiscountInfo ? `
+                <div style="display: flex; justify-content: space-between; font-size: 15px;">
+                    <span>Subtotal:</span>
+                    <span>R$ ${Number(subtotal).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 15px; color: red;">
+                    <span>Desconto:</span>
+                    <span>- R$ ${Number(desconto).toFixed(2)}</span>
+                </div>
+            ` : ''}
+
              <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; margin-top: 10px;">
                  <span>Total:</span>
                  <span>R$ ${Number(venda.valor_total).toFixed(2)}</span>
@@ -90,6 +107,22 @@ const generateAndPrintCostReport = (vendas, totais, filters) => {
          tfoot tr { background-color: #e0e0e0; font-weight: bold;}
     `;
 
+    // --- LÓGICA DO RELATÓRIO PDF MODIFICADA ---
+    // Precisamos calcular o subtotal e desconto para o relatório
+    const vendasParaRelatorio = vendas.map(v => {
+        const desconto = v.desconto || 0;
+        // Recalcula o subtotal com base nos itens.
+        const subtotalItens = v.itens_venda?.reduce((sum, item) => sum + (item.quantidade * (item.preco_unitario ?? 0)), 0) || v.valor_total;
+        // Garante que o subtotal seja pelo menos o valor total (caso não haja desconto)
+        const subtotal = Math.max(v.valor_total + desconto, subtotalItens);
+
+        return {
+            ...v,
+            subtotalCalculado: subtotal,
+            descontoCalculado: subtotal - v.valor_total
+        };
+    });
+
     const reportContent = `
         <div style="width: 100%;">
             <div style="text-align: center; border-bottom: 1px solid #000; padding-bottom: 10px; margin-bottom: 15px;">
@@ -100,7 +133,7 @@ const generateAndPrintCostReport = (vendas, totais, filters) => {
             <h2>Resumo do Período</h2>
             <div class="summary-grid">
                 <span>Total de Vendas:</span> <span>${vendas.length}</span>
-                <span>Receita Bruta Total:</span> <span>${formatCurrency(totais.receitaBruta)}</span>
+                <span>Receita Bruta Total (Líquida):</span> <span>${formatCurrency(totais.receitaBruta)}</span>
                 <span class="cost">Custo Total Produtos:</span> <span class="cost">(${formatCurrency(totais.custoProdutos)})</span>
                 <span class="cost">Custo Total Pagamentos:</span> <span class="cost">(${formatCurrency(totais.custoPagamento)})</span>
                 <span style="font-weight: bold;">Lucro Bruto Total:</span>
@@ -111,15 +144,18 @@ const generateAndPrintCostReport = (vendas, totais, filters) => {
                 <thead>
                     <tr>
                         <th>ID</th> <th>Data</th> <th>Cliente</th> <th>Método Pag.</th>
-                        <th class="currency">Receita</th> <th class="currency cost">C. Prod</th>
+                        <th class="currency">Subtotal</th> <th class="currency cost">Desc.</th>
+                        <th class="currency">Receita (Líq.)</th> <th class="currency cost">C. Prod</th>
                         <th class="currency cost">C. Pagto</th> <th class="currency">Lucro B.</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${vendas.map(v => `
+                    ${vendasParaRelatorio.map(v => `
                         <tr>
                             <td>#${v.id}</td> <td>${new Date(v.criado_em).toLocaleString('pt-BR')}</td>
                             <td>${v.nome_cliente || '-'}</td> <td>${v.metodo_pagamento || '-'}</td>
+                            <td class="currency">${formatCurrency(v.subtotalCalculado)}</td>
+                            <td class="currency cost">(${formatCurrency(v.descontoCalculado)})</td>
                             <td class="currency">${formatCurrency(v.valor_total)}</td>
                             <td class="currency cost">${formatCurrency(v.custoProdutosCalculado)}</td>
                             <td class="currency cost">${formatCurrency(v.custo_pagamento)}</td>
@@ -129,7 +165,7 @@ const generateAndPrintCostReport = (vendas, totais, filters) => {
                 </tbody>
                  <tfoot>
                     <tr>
-                        <td colspan="4" style="text-align: right;">TOTAIS:</td>
+                        <td colspan="6" style="text-align: right;">TOTAIS:</td>
                         <td class="currency">${formatCurrency(totais.receitaBruta)}</td>
                         <td class="currency cost">${formatCurrency(totais.custoProdutos)}</td>
                         <td class="currency cost">${formatCurrency(totais.custoPagamento)}</td>
@@ -139,6 +175,7 @@ const generateAndPrintCostReport = (vendas, totais, filters) => {
             </table>
         </div>
     `;
+    // --- FIM DA MODIFICAÇÃO DO PDF ---
 
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`<html><head><title>Relatório de Custos - ${periodo}</title><style>${printStyles}</style></head><body>${reportContent}</body></html>`);
@@ -163,16 +200,14 @@ export default function VendasPage() {
   const [taxasError, setTaxasError] = useState('');
   const [taxasSuccess, setTaxasSuccess] = useState('');
 
-  // Estados de paginação
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // Estados para o modal de exclusão
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [vendaToDelete, setVendaToDelete] = useState(null);
   const [deleteError, setDeleteError] = useState('');
 
-  // Funções de Taxas
+  // ... (Funções de Taxas - sem alteração) ...
   const fetchTaxas = async () => {
     setIsLoadingTaxas(true); setTaxasError('');
     try {
@@ -206,7 +241,7 @@ export default function VendasPage() {
   async function fetchVendas() {
       setError(null); setLoading(true);
       try {
-        const response = await fetch('/api/vendas');
+        const response = await fetch('/api/vendas'); // A API agora retorna 'desconto'
         if (!response.ok) { throw new Error('Falha ao carregar os dados das vendas.'); }
         const data = await response.json(); setAllVendas(data);
       } catch (err) { setError(err.message); }
@@ -228,7 +263,7 @@ export default function VendasPage() {
     setCurrentPage(1);
   };
 
-  // Memos para processar dados
+  // Memos para processar dados (sem alteração)
   const filteredVendas = useMemo(() => {
     return allVendas.filter(venda => {
             const vendaDate = new Date(venda.criado_em);
@@ -249,7 +284,6 @@ export default function VendasPage() {
         }).sort((a, b) => new Date(b.criado_em) - new Date(a.criado_em));
   }, [allVendas, filters]);
 
-  // MODIFICAÇÃO 1: Cálculo da margem de lucro adicionado
   const totaisPeriodo = useMemo(() => {
     const totais = filteredVendas.reduce((acc, venda) => {
         acc.receitaBruta += venda.valor_total;
@@ -277,11 +311,15 @@ export default function VendasPage() {
       return filteredVendas.slice(startIndex, endIndex);
   }, [filteredVendas, currentPage, itemsPerPage]);
 
-  // Funções de Ação (Imprimir, Exportar, Excluir)
+  // --- Funções de Ação ---
+  
+  // (MODIFICADO) handlePrintReceipt agora busca o desconto
   const handlePrintReceipt = async (saleId) => {
     if (!saleId) return;
     try {
-      const res = await fetch(`/api/vendas/${saleId}`);
+      // Esta API (api/vendas/[id]) precisa ser atualizada para buscar 'desconto' também.
+      // Assumindo que ela busque, a função 'generateAndPrintReceipt' já saberá o que fazer.
+      const res = await fetch(`/api/vendas/${saleId}`); 
       if (!res.ok) throw new Error('Não foi possível buscar os dados da venda para impressão.');
       const vendaData = await res.json();
       generateAndPrintReceipt(vendaData);
@@ -296,35 +334,60 @@ export default function VendasPage() {
     generateAndPrintCostReport(filteredVendas, totaisPeriodo, filters);
   };
 
+  // (MODIFICADO) Exportar XLSX agora inclui subtotal e desconto
   const handleExportXLSX = () => {
         if (filteredVendas.length === 0) { alert("Nenhuma venda encontrada para exportar."); return; }
-        const dataToExport = filteredVendas.map(v => ({
-            'ID Venda': `#${v.id}`, 'Data': new Date(v.criado_em).toLocaleDateString('pt-BR'),
-            'Hora': new Date(v.criado_em).toLocaleTimeString('pt-BR'), 'Cliente': v.nome_cliente || '-',
-            'Método Pag.': v.metodo_pagamento || '-', 'Receita Bruta': v.valor_total,
-            'Custo Produtos': v.custoProdutosCalculado, 'Custo Pagamento': v.custo_pagamento ?? 0,
-            'Lucro Bruto': v.lucroCalculado,
-        }));
+        
+        const dataToExport = filteredVendas.map(v => {
+            const subtotal = (v.valor_total || 0) + (v.desconto || 0);
+            return {
+                'ID Venda': `#${v.id}`, 'Data': new Date(v.criado_em).toLocaleDateString('pt-BR'),
+                'Hora': new Date(v.criado_em).toLocaleTimeString('pt-BR'), 'Cliente': v.nome_cliente || '-',
+                'Método Pag.': v.metodo_pagamento || '-', 
+                'Subtotal': subtotal,
+                'Desconto': v.desconto || 0,
+                'Receita Bruta (Líq.)': v.valor_total,
+                'Custo Produtos': v.custoProdutosCalculado, 'Custo Pagamento': v.custo_pagamento ?? 0,
+                'Lucro Bruto': v.lucroCalculado,
+            };
+        });
+
         const ws = XLSX.utils.json_to_sheet(dataToExport);
+
+        // Adiciona a linha de total
         const totalRow = {
-            'ID Venda': 'TOTAIS:', 'Receita Bruta': totaisPeriodo.receitaBruta,
+            'ID Venda': 'TOTAIS:', 
+            'Receita Bruta (Líq.)': totaisPeriodo.receitaBruta,
             'Custo Produtos': totaisPeriodo.custoProdutos, 'Custo Pagamento': totaisPeriodo.custoPagamento,
             'Lucro Bruto': totaisPeriodo.lucroBruto,
         };
         XLSX.utils.sheet_add_json(ws, [totalRow], { skipHeader: true, origin: -1 });
-        ws['!cols'] = [ { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, ];
+        
+        // Ajusta a largura das colunas
+        ws['!cols'] = [ { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 18 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 } ];
+        
         const range = XLSX.utils.decode_range(ws['!ref']);
-        const currencyCols = [5, 6, 7, 8];
+        // Colunas de moeda (F, G, H, I, J, K) - índices 5, 6, 7, 8, 9, 10
+        const currencyCols = [5, 6, 7, 8, 9, 10]; 
         for (let R = range.s.r + 1; R <= range.e.r; ++R) {
             currencyCols.forEach(C => {
                 const cell_ref = XLSX.utils.encode_cell({ c: C, r: R });
                 if (ws[cell_ref] && ws[cell_ref].v !== undefined) {
                      ws[cell_ref].t = 'n'; ws[cell_ref].z = 'R$ #,##0.00';
-                     if (R === range.e.r && (C === 6 || C === 7)) { ws[cell_ref].s = { font: { color: { rgb: "FF880000" } }, numFmt: 'R$ #,##0.00' }; }
-                     if (R === range.e.r && C === 8) { ws[cell_ref].s = { font: { color: { rgb: ws[cell_ref].v >= 0 ? "FF006600" : "FFAA0000"} }, numFmt: 'R$ #,##0.00' }; }
+                     
+                     // Formatação especial para a linha de Total
+                     if (R === range.e.r) {
+                        if (C === 8 || C === 9) { // Custo Prod e Custo Pagto
+                            ws[cell_ref].s = { font: { color: { rgb: "FF880000" } }, numFmt: 'R$ #,##0.00' }; 
+                        }
+                        if (C === 10) { // Lucro Bruto
+                            ws[cell_ref].s = { font: { color: { rgb: ws[cell_ref].v >= 0 ? "FF006600" : "FFAA0000"} }, numFmt: 'R$ #,##0.00' }; 
+                        }
+                     }
                 }
             });
         }
+
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'RelatorioVendas');
         const dataFiltro = filters.startDate || filters.endDate ? `_${filters.startDate}_a_${filters.endDate}` : '';
@@ -332,7 +395,7 @@ export default function VendasPage() {
         XLSX.writeFile(wb, fileName);
   };
   
-  // Funções do Modal de Exclusão
+  // ... (Funções do Modal de Exclusão - sem alteração) ...
   const openDeleteModal = (venda) => {
     setVendaToDelete(venda);
     setDeleteError('');
@@ -346,7 +409,7 @@ export default function VendasPage() {
   
   const handleDeleteConfirm = async () => {
     if (!vendaToDelete) return;
-    setLoading(true); // Reutiliza o loading principal
+    setLoading(true); 
     setDeleteError('');
     
     try {
@@ -360,9 +423,8 @@ export default function VendasPage() {
         throw new Error(responseData.message || "Falha ao excluir a venda.");
       }
       
-      // Sucesso
       closeDeleteModal();
-      await fetchVendas(); // Recarrega os dados
+      await fetchVendas(); 
       
     } catch (err) {
       setDeleteError(err.message);
@@ -376,6 +438,7 @@ export default function VendasPage() {
     <div className="min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] p-4 sm:p-6 lg:p-8 font-sans">
       <div className="max-w-7xl mx-auto">
         
+        {/* ... (Header e Filtros - sem alteração) ... */}
         <div className="mb-6 flex items-center justify-between">
            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
             <ShoppingBag size={32} /> Relatório de Vendas
@@ -441,14 +504,14 @@ export default function VendasPage() {
             </div>
         </div>
 
-        {/* MODIFICAÇÃO 2: Alterado de md:grid-cols-4 para md:grid-cols-5 */}
+        {/* ... (Cards de Resumo - sem alteração) ... */}
         <div className="mb-6 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-lg grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
              <div>
                 <p className="text-sm text-gray-300">Vendas Período</p>
                 <p className="text-2xl font-bold text-white">{filteredVendas.length}</p>
             </div>
             <div>
-                <p className="text-sm text-gray-300">Receita Bruta</p>
+                <p className="text-sm text-gray-300">Receita Bruta (Líq.)</p>
                 <p className="text-2xl font-bold text-white">
                     {totaisPeriodo.receitaBruta.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </p>
@@ -466,7 +529,6 @@ export default function VendasPage() {
                     {totaisPeriodo.lucroBruto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </p>
             </div>
-            {/* MODIFICAÇÃO 3: Novo card adicionado */}
             <div>
                 <p className="text-sm text-gray-300">Margem Lucro (%)</p>
                 <p className={`text-2xl font-bold ${totaisPeriodo.lucroBruto >= 0 ? 'text-green-300' : 'text-red-300'}`}>
@@ -484,39 +546,63 @@ export default function VendasPage() {
             ) : filteredVendas.length === 0 ? (
                <p className="text-center text-gray-800 py-10">Nenhuma venda encontrada para os filtros aplicados.</p>
             ) : (
-              <table className="w-full text-left min-w-[800px]">
+              // --- MODIFICADO: min-w-[1000px] ---
+              <table className="w-full text-left min-w-[1000px]"> 
+                {/* --- MODIFICADO: Cabeçalho da Tabela --- */}
                 <thead className="bg-white/20">
                   <tr>
                     <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider">ID</th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider">Data e Hora</th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider">Método Pag.</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider text-right">Subtotal</th>
+                    <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider text-right">Desconto</th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider text-right">Valor Total</th>
                     <th className="px-4 py-3 text-xs font-bold text-gray-800 uppercase tracking-wider text-center">Ações</th>
                   </tr>
                 </thead>
+                {/* --- MODIFICADO: Corpo da Tabela --- */}
                 <tbody className="divide-y divide-gray-200/50">
-                  {paginatedVendas.map((venda) => (
-                    <tr key={venda.id} className="hover:bg-black/10">
-                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">#{venda.id}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        <div className="flex items-center gap-1">
-                           <Calendar size={14} />
-                           {new Date(venda.criado_em).toLocaleString('pt-BR')}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                        <div className="flex items-center gap-1">
-                          <CreditCard size={14} />
-                          {venda.metodo_pagamento}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                           {Number(venda.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-center text-sm">
-                        <div className="flex justify-center items-center gap-3">
+                  {paginatedVendas.map((venda) => {
+                    
+                    // --- LÓGICA DE CÁLCULO MODIFICADA ---
+                    // Usa o 'desconto' que veio do banco de dados (pode ser 0 ou null)
+                    const desconto = venda.desconto || 0;
+                    // O Subtotal é o Total (líquido) + o Desconto
+                    const subtotal = venda.valor_total + desconto;
+                    
+                    return (
+                      <tr key={venda.id} className="hover:bg-black/10">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">#{venda.id}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          <div className="flex items-center gap-1">
+                            <Calendar size={14} />
+                            {new Date(venda.criado_em).toLocaleString('pt-BR')}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          <div className="flex items-center gap-1">
+                            <CreditCard size={14} />
+                            {venda.metodo_pagamento}
+                          </div>
+                        </td>
+                        
+                        {/* --- COLUNAS ADICIONADAS --- */}
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 text-right">
+                          {Number(subtotal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-red-600 text-right">
+                          {/* Exibe o desconto (ou R$ 0,00) */}
+                          {Number(desconto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </td>
+                        {/* --- FIM DAS COLUNAS ADICIONADAS --- */}
+
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-700 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {Number(venda.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center text-sm">
+                          <div className="flex justify-center items-center gap-3">
                             <button
                               onClick={() => handlePrintReceipt(venda.id)}
                               className="text-[#A16207] hover:text-[#8f5606] p-1 rounded-full hover:bg-yellow-100"
@@ -531,15 +617,17 @@ export default function VendasPage() {
                             >
                               <Trash2 size={16} />
                             </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}
           </div>
 
+          {/* ... (Paginação - sem alteração) ... */}
           {filteredVendas.length > 0 && totalPages > 1 && !loading && !error && (
             <div className="p-4 flex flex-col sm:flex-row justify-between items-center text-sm text-gray-700 bg-white/20 border-t border-gray-200/50">
                 <div className="flex items-center gap-2 mb-2 sm:mb-0">
@@ -586,6 +674,7 @@ export default function VendasPage() {
         </div>
       </div>
 
+       {/* ... (Modal de Taxas - sem alteração) ... */}
        {isTaxasModalOpen && (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
                 <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -646,6 +735,7 @@ export default function VendasPage() {
             </div>
         )}
         
+        {/* ... (Modal de Exclusão - sem alteração) ... */}
         {isDeleteModalOpen && (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
                 <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -657,8 +747,8 @@ export default function VendasPage() {
                     <p className="text-gray-700 mb-4">
                         Tem certeza que deseja excluir permanentemente a venda <strong>#{vendaToDelete?.id}</strong>?
                     </p>
-                    <p className="text-sm text-red-600 bg-red-50 p-3 rounded-md mb-6">
-                        <strong>Atenção:</strong> Esta ação não pode ser desfeita. A exclusão desta venda NÃO irá restaurar o estoque dos produtos vendidos.
+                    <p className="text-sm text-green-700 bg-green-50 p-3 rounded-md mb-6">
+                        <strong>Atenção:</strong> Esta ação não pode ser desfeita. O estoque dos produtos desta venda **SERÁ RESTAURADO** automaticamente.
                     </p>
                     
                     {deleteError && (

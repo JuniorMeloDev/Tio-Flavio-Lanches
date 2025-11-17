@@ -1,12 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { ShoppingCart, ArrowLeft, XCircle, CheckCircle, X, Printer, Ban, Plus, Copy, User, Percent } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { ShoppingCart, ArrowLeft, XCircle, CheckCircle, X, Ban, Plus, User, Printer } from 'lucide-react';
 
-// Função para gerar e imprimir o comprovativo (ATUALIZADA para quebra de linha)
 const generateAndPrintReceipt = (venda) => {
-    const hasDiscountInfo = venda.hasOwnProperty('valor_subtotal') && venda.desconto > 0;
-
     const receiptContent = `
         <div style="font-family: 'Courier New', monospace; width: 300px; padding: 10px; font-size: 15px; color: #000; font-weight: bold;">
             <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px;">
@@ -19,22 +16,12 @@ const generateAndPrintReceipt = (venda) => {
             </div>
             <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin-bottom: 10px;">
                 ${venda.itens.map(item => `
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3px;">
+                    <div style="display: flex; justify-content: space-between; align-items-flex-start; margin-bottom: 3px;">
                         <span style="max-width: 200px;">${item.produtos.nome} (${item.quantidade}x)</span>
                         <span>R$ ${(item.quantidade * item.preco_unitario).toFixed(2)}</span>
                     </div>
                 `).join('')}
             </div>
-            ${hasDiscountInfo ? `
-                <div style="display: flex; justify-content: space-between; font-size: 15px;">
-                    <span>Subtotal:</span>
-                    <span>R$ ${Number(venda.valor_subtotal).toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; font-size: 15px; color: red;">
-                    <span>Desconto:</span>
-                    <span>- R$ ${Number(venda.desconto).toFixed(2)}</span>
-                </div>
-            ` : ''}
             <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 18px; margin-top: 10px;">
                 <span>Total:</span>
                 <span>R$ ${Number(venda.valor_total).toFixed(2)}</span>
@@ -54,69 +41,26 @@ const generateAndPrintReceipt = (venda) => {
 };
 
 
-// --- Funções para gerar o Payload do PIX (BR Code) ---
-const crc16 = (payload) => {
-    let crc = 0xFFFF;
-    const polynomial = 0x1021;
-    for (let i = 0; i < payload.length; i++) {
-        crc ^= payload.charCodeAt(i) << 8;
-        for (let j = 0; j < 8; j++) {
-            crc = (crc & 0x8000) ? (crc << 1) ^ polynomial : crc << 1;
-        }
-    }
-    return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
-};
-
-const formatField = (id, value) => {
-    const length = value.length.toString().padStart(2, '0');
-    return `${id}${length}${value}`;
-};
-
-const generatePixPayload = (key, merchantName, city, amount, txid = '***') => {
-    const cleanKey = String(key || '').trim().replace(/[^a-zA-Z0-9@.-]/g, '');
-    const cleanName = String(merchantName || '').trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").substring(0, 25);
-    const cleanCity = String(city || '').trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 15);
-    
-    const field26 = 
-        formatField('00', 'BR.GOV.BCB.PIX') +
-        formatField('01', cleanKey);
-
-    const amountStr = Number(amount || 0).toFixed(2);
-
-    const payload = [
-        formatField('00', '01'),
-        formatField('26', field26),
-        formatField('52', '0000'),
-        formatField('53', '986'),
-        formatField('54', amountStr),
-        formatField('58', 'BR'),
-        formatField('59', cleanName),
-        formatField('60', cleanCity),
-        formatField('62', formatField('05', txid))
-    ].join('');
-    
-    const payloadWithCrcMarker = `${payload}6304`;
-    const finalCrc = crc16(payloadWithCrcMarker);
-    return payloadWithCrcMarker + finalCrc;
-};
-
-// --- Componente do Carrinho ---
+/**
+ * --- COMPONENTE DO CARRINHO (MODIFICADO) ---
+ * 'total' agora vem direto do 'useMemo' simples.
+ */
 const CartComponent = ({
     isMobile, cart, total, customerName, setCustomerName, 
-    setIsCartOpenMobile, removeFromCart, openPaymentModal, setErrorMessage
+    setIsCartOpenMobile, removeFromCart, handleSendToKitchen, isProcessingPayment, setErrorMessage
 }) => (
     <div className={`p-6 flex flex-col h-full bg-white w-full`}>
+        {/* ... (cabeçalho e input de nome) ... */}
         <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <ShoppingCart /> Carrinho
-        </h2>
-        {isMobile && (
-            <button onClick={() => setIsCartOpenMobile(false)} className="text-gray-500 hover:text-gray-800">
-                <X size={24} />
-            </button>
-        )}
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <ShoppingCart /> Carrinho
+            </h2>
+            {isMobile && (
+                <button onClick={() => setIsCartOpenMobile(false)} className="text-gray-500 hover:text-gray-800">
+                    <X size={24} />
+                </button>
+            )}
         </div>
-
         <div className="mb-4">
             <label htmlFor="customerName" className="block text-sm font-medium text-gray-700">Nome do Cliente</label>
             <div className="mt-1 relative rounded-md shadow-sm">
@@ -128,12 +72,13 @@ const CartComponent = ({
                     id="customerName"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Opcional (Ex: João da mesa 5)"
+                    placeholder="Opcional (Ex: Cliente Balcão)"
                     className="w-full p-2 pl-10 border border-gray-300 text-gray-800 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#A16207]"
                 />
             </div>
         </div>
         
+        {/* ... (lista de itens do carrinho) ... */}
         <div className="flex-1 overflow-y-auto">
         {cart.length === 0 ? (
             <p className="text-gray-500">O carrinho está vazio.</p>
@@ -154,20 +99,22 @@ const CartComponent = ({
             ))
         )}
         </div>
+
         <div className="border-t pt-4">
             <div className="flex justify-between items-center mb-4">
                 <span className="text-xl font-bold text-gray-800">Total</span>
+                {/* Total agora é o total simples, sem desconto */}
                 <span className="text-2xl font-bold text-[#A16207]">{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
             </div>
             <button
                 onClick={() => {
-                if (cart.length > 0) { openPaymentModal(); } 
-                else { setErrorMessage('Adicione itens ao carrinho para finalizar a venda.'); }
+                if (cart.length > 0) { handleSendToKitchen(); } 
+                else { setErrorMessage('Adicione itens ao carrinho para enviar o pedido.'); }
                 }}
-                className="w-full bg-[#A16207] text-white py-3 rounded-lg font-bold text-lg hover:bg-[#8f5606] transition-colors disabled:bg-gray-400"
-                disabled={cart.length === 0}
+                className="w-full bg-[#A16207] text-white py-3 rounded-lg font-bold text-lg hover:bg-[#8f5606] transition-colors disabled:bg-gray-400 disabled:opacity-70"
+                disabled={cart.length === 0 || isProcessingPayment}
             >
-                Finalizar Venda
+                {isProcessingPayment ? 'Enviando...' : 'Enviar para Cozinha'}
             </button>
         </div>
     </div>
@@ -177,81 +124,28 @@ const CartComponent = ({
 export default function PdvPage() {
     const [products, setProducts] = useState([]);
     const [cart, setCart] = useState([]);
-    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    
     const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
     const [isCartOpenMobile, setIsCartOpenMobile] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('Dinheiro');
-    const [cardType, setCardType] = useState(null);
+    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+    
     const [activeCategory, setActiveCategory] = useState('Lanches');
     const [searchTerm, setSearchTerm] = useState('');
     const [variationModalProduct, setVariationModalProduct] = useState(null);
-    const [pixPayload, setPixPayload] = useState('');
-    const [copySuccess, setCopySuccess] = useState('');
-    const qrCanvasRef = useRef(null);
-    const categories = ['Lanches', 'Supremo Grill', 'Bebidas Especiais', 'Bebidas'];
-    const [customerName, setCustomerName] = useState('');
-    const [taxasPagamento, setTaxasPagamento] = useState({});
-    const [isLoadingTaxas, setIsLoadingTaxas] = useState(true);
-    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-
-    const [discount, setDiscount] = useState('');
-    const [lastSaleDataForReceipt, setLastSaleDataForReceipt] = useState(null);
     
-    const [amountReceived, setAmountReceived] = useState('');
+    const [customerName, setCustomerName] = useState('');
+    
+    // --- ESTADO DE DESCONTO REMOVIDO ---
+    // const [discount, setDiscount] = useState('');
+    
+    const [lastSaleDataForReceipt, setLastSaleDataForReceipt] = useState(null);
 
-    const PIX_KEY = process.env.NEXT_PUBLIC_PIX_KEY;
-    const PIX_MERCHANT_NAME = process.env.NEXT_PUBLIC_PIX_MERCHANT_NAME;
-    const PIX_MERCHANT_CITY = process.env.NEXT_PUBLIC_PIX_MERCHANT_CITY;
+    const categories = ['Lanches', 'Supremo Grill', 'Bebidas Especiais', 'Bebidas'];
 
+    // --- CÁLCULOS DE TOTAIS (SIMPLIFICADO) ---
     const total = useMemo(() => cart.reduce((acc, item) => acc + item.preco * item.quantity, 0), [cart]);
     
-    const numericDiscount = useMemo(() => parseFloat(String(discount).replace(/\./g, '').replace(',', '.')) || 0, [discount]);
-
-    const totalAfterDiscount = useMemo(() => {
-        const newTotal = total - numericDiscount;
-        return newTotal > 0 ? newTotal : 0;
-    }, [total, numericDiscount]);
-
-    const amountReceivedNumber = useMemo(() => parseFloat(String(amountReceived).replace(/\./g, '').replace(',', '.')) || 0, [amountReceived]);
-    
-    const changeDue = useMemo(() => {
-        if (selectedPaymentMethod !== 'Dinheiro' || !amountReceived) return 0;
-        return amountReceivedNumber - totalAfterDiscount;
-    }, [amountReceivedNumber, totalAfterDiscount, selectedPaymentMethod, amountReceived]);
-
-
-    useEffect(() => {
-        const scriptId = 'qrious-cdn';
-        if (!document.getElementById(scriptId)) {
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js';
-        script.async = true;
-        document.body.appendChild(script);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (isPaymentModalOpen && selectedPaymentMethod === 'Pix' && qrCanvasRef.current && window.QRious) {
-            const payload = generatePixPayload(PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY, totalAfterDiscount);
-            setPixPayload(payload);
-            new window.QRious({
-                element: qrCanvasRef.current,
-                value: payload, size: 220, padding: 10,
-            });
-        }
-    }, [isPaymentModalOpen, selectedPaymentMethod, totalAfterDiscount, PIX_KEY, PIX_MERCHANT_NAME, PIX_MERCHANT_CITY]);
-
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(pixPayload).then(() => {
-            setCopySuccess('Copiado!');
-            setTimeout(() => setCopySuccess(''), 2000);
-        }, () => {
-            setCopySuccess('Falha ao copiar.');
-        });
-    };
-
     const fetchProducts = async () => {
         try {
         const res = await fetch('/api/produtos');
@@ -261,23 +155,9 @@ export default function PdvPage() {
     };
 
     useEffect(() => {
-        const fetchTaxas = async () => {
-            setIsLoadingTaxas(true);
-            try {
-                const res = await fetch('/api/config/taxas');
-                if (!res.ok) throw new Error('Falha ao buscar taxas.');
-                const data = await res.json(); setTaxasPagamento(data);
-            } catch (error) {
-                console.error("Erro ao carregar taxas:", error);
-                setTaxasPagamento({ 'Dinheiro': 0, 'Pix': 0, 'Cartão - Débito': 0, 'Cartão - Crédito': 0 });
-                setErrorMessage('Erro ao carregar taxas de pagamento.');
-            } finally { setIsLoadingTaxas(false); }
-        };
-        fetchTaxas();
         fetchProducts();
     }, []);
 
-    // INÍCIO DA ALTERAÇÃO
     const processedProducts = useMemo(() => {
         let filtered = searchTerm
         ? products.filter(p => p.nome.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -290,7 +170,6 @@ export default function PdvPage() {
             if (product.nome.includes(':')) {
                 const [parentName, variationName] = product.nome.split(':').map(s => s.trim());
                 if (!parents[parentName]) {
-                    // Removido 'preco: product.preco' daqui
                     parents[parentName] = { 
                         isParent: true, 
                         nome: parentName, 
@@ -304,14 +183,12 @@ export default function PdvPage() {
             }
         });
 
-        // Agora, iteramos nos parents para definir o preço mínimo e ordenar as variações
         Object.values(parents).forEach(parent => {
             if (parent.variations.length > 0) {
-                // Define o preço do 'pai' como o menor preço das suas variações
                 parent.preco = Math.min(...parent.variations.map(v => v.preco));
                 parent.variations.sort((a,b) => a.variationName.localeCompare(b.variationName));
             } else {
-                parent.preco = 0; // Fallback, caso não haja variações
+                parent.preco = 0; 
             }
         });
         
@@ -319,7 +196,6 @@ export default function PdvPage() {
         combined.sort((a,b) => a.nome.localeCompare(b.nome));
         return combined;
     }, [products, activeCategory, searchTerm]);
-    // FIM DA ALTERAÇÃO
 
     const handleFilterCategory = (category) => {
         setActiveCategory(category);
@@ -349,60 +225,40 @@ export default function PdvPage() {
         setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
     };
 
-    const formatCurrencyInput = (value) => {
-        if (!value) return '';
-        const digitsOnly = value.replace(/\D/g, '');
-        if (digitsOnly === '') return '';
-
-        const numberValue = parseInt(digitsOnly, 10);
-        const formattedValue = (numberValue / 100).toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        });
-
-        return formattedValue;
-    };
-    
-    const handleAmountReceivedChange = (e) => {
-        const formattedValue = formatCurrencyInput(e.target.value);
-        setAmountReceived(formattedValue);
-    };
-
-    const handleDiscountChange = (e) => {
-        const formattedValue = formatCurrencyInput(e.target.value);
-        setDiscount(formattedValue);
-    };
-
-
-    const handleConfirmPayment = async () => {
-        if (cart.length === 0) { setErrorMessage('O carrinho está vazio.'); return; }
-        let finalPaymentMethod = selectedPaymentMethod;
-        if (selectedPaymentMethod === 'Cartão') {
-            if (!cardType) { setErrorMessage('Por favor, selecione Débito ou Crédito.'); return; }
-            finalPaymentMethod = `Cartão - ${cardType}`;
-        }
-        if (selectedPaymentMethod === 'Dinheiro') {
-            if (isNaN(amountReceivedNumber) || amountReceivedNumber < totalAfterDiscount) { setErrorMessage('O valor recebido é insuficiente ou inválido.'); return; }
+    const handleSendToKitchen = async () => {
+        if (cart.length === 0) { 
+            setErrorMessage('O carrinho está vazio.'); 
+            return; 
         }
         if (isProcessingPayment) return; 
         setIsProcessingPayment(true);       
 
-        const taxaPercentual = taxasPagamento[finalPaymentMethod] ?? 0;
-        const custoPagamento = (totalAfterDiscount * (taxaPercentual / 100)).toFixed(2);
-        
         const saleData = {
-            itens: cart.map(item => ({ id: item.id, quantity: item.quantity, preco: item.preco, preco_custo: item.preco_custo, nome: item.nome })),
-            total: totalAfterDiscount,
-            metodo_pagamento: finalPaymentMethod,
-            nome_cliente: customerName.trim() || 'PDV',
-            custo_pagamento: parseFloat(custoPagamento)
+            itens: cart.map(item => ({ 
+                id: item.id, 
+                quantity: item.quantity, 
+                preco: item.preco, 
+                preco_custo: item.preco_custo, 
+                nome: item.nome 
+            })),
+            total: total, // MODIFICADO: Era totalAfterDiscount
+            metodo_pagamento: "Pendente", 
+            nome_cliente: customerName.trim() || 'Cliente Balcão', 
+            custo_pagamento: 0
         };
-        try {
-            const res = await fetch('/api/vendas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(saleData) });
-            const responseData = await res.json();
-            if (!res.ok) { throw new Error(responseData.message || 'Ocorreu um erro ao registrar a venda.'); }
 
-            // Cria objeto com dados para o recibo
+        try {
+            const res = await fetch('/api/vendas', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify(saleData) 
+            });
+            
+            const responseData = await res.json();
+            if (!res.ok) { 
+                throw new Error(responseData.message || 'Ocorreu um erro ao registrar a venda.'); 
+            }
+            
             const receiptData = {
                 id: responseData.venda_id,
                 criado_em: new Date().toISOString(),
@@ -411,96 +267,84 @@ export default function PdvPage() {
                     quantidade: item.quantity,
                     preco_unitario: item.preco
                 })),
-                valor_subtotal: total,
-                desconto: numericDiscount,
-                valor_total: totalAfterDiscount,
-                metodo_pagamento: finalPaymentMethod
+                valor_subtotal: total, 
+                desconto: 0, // MODIFICADO: Era numericDiscount
+                valor_total: total, // MODIFICADO: Era totalAfterDiscount
+                metodo_pagamento: "Pendente"
             };
             setLastSaleDataForReceipt(receiptData);
 
-            setIsPaymentModalOpen(false);
+            setIsSuccessModalOpen(true); 
             setIsCartOpenMobile(false);
-            setIsSuccessModalOpen(true);
             setCart([]);
             setCustomerName('');
-            setDiscount('');
-            fetchProducts();
+            // setDiscount(''); // REMOVIDO
+            fetchProducts(); 
         } catch (error) {
             setErrorMessage(error.message);
-            setIsPaymentModalOpen(false);
         } finally {
-        setIsProcessingPayment(false); // <--- GARANTE QUE O ESTADO SERÁ RESETADO
+            setIsProcessingPayment(false);
         }
     };
     
-    const handlePrintLastReceipt = () => {
-        if (lastSaleDataForReceipt) {
-            generateAndPrintReceipt(lastSaleDataForReceipt);
-        } else {
-            setErrorMessage("Não foi possível gerar o comprovante.");
-        }
-    };
-
     const closeSuccessModal = () => {
         setIsSuccessModalOpen(false);
-        setLastSaleDataForReceipt(null);
+        setLastSaleDataForReceipt(null); 
+    };
+
+    const handlePrintAndClose = () => {
+        if (lastSaleDataForReceipt) {
+            generateAndPrintReceipt(lastSaleDataForReceipt);
+        }
+        closeSuccessModal(); 
     };
     
-    const openPaymentModal = () => {
-        setSelectedPaymentMethod('Dinheiro');
-        setCardType(null);
-        setAmountReceived('');
-        setDiscount('');
-        setErrorMessage('');
-        setIsPaymentModalOpen(true);
-    };
-
     useEffect(() => {
-  async function initPush() {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    const reg = await navigator.serviceWorker.register('/sw.js');
-    if (Notification.permission === 'default') await Notification.requestPermission();
-    if (Notification.permission !== 'granted') return;
+        async function initPush() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+            const reg = await navigator.serviceWorker.register('/sw.js');
+            if (Notification.permission === 'default') await Notification.requestPermission();
+            if (Notification.permission !== 'granted') return;
 
-    const res = await fetch('/api/push/vapid');
-    const { publicKey } = await res.json();
-    const convertedKey = urlBase64ToUint8Array(publicKey);
+            const res = await fetch('/api/push/vapid');
+            const { publicKey } = await res.json();
+            const convertedKey = urlBase64ToUint8Array(publicKey);
 
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: convertedKey,
-    });
+            const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: convertedKey,
+            });
 
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub),
-    });
+            await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sub),
+            });
 
-    console.log('Push registrado com sucesso!');
-  }
+            console.log('Push registrado com sucesso!');
+        }
 
-  initPush();
+        initPush();
 
-  navigator.serviceWorker.addEventListener('message', (e) => {
-    if (e.data?.type === 'NEW_ORDER') {
-      // 🔊 Tocar som local (caso a aba esteja aberta)
-      const audio = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg');
-      audio.play().catch(() => {});
-    }
-  });
+        navigator.serviceWorker.addEventListener('message', (e) => {
+            if (e.data?.type === 'NEW_ORDER') {
+            const audio = new Audio('https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg');
+            audio.play().catch(() => {});
+            }
+        });
 
-  function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-    const rawData = atob(base64);
-    return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
-  }
-}, []);
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+            const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            const rawData = atob(base64);
+            return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+        }
+    }, []);
 
 
     return (
         <div className="relative flex flex-col md:flex-row h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] font-sans overflow-hidden">
+            {/* ... (Coluna da Esquerda - Produtos - sem alteração) ... */}
             <div className="p-6 flex flex-col flex-1 min-h-0">
                 <div className="mb-6 flex items-center justify-between">
                     <h1 className="text-3xl font-bold text-white">Ponto de Venda</h1>
@@ -544,9 +388,15 @@ export default function PdvPage() {
 
             <div className="hidden md:flex md:w-[450px] md:flex-shrink-0 shadow-lg">
                 <CartComponent
-                    isMobile={false} cart={cart} total={total} customerName={customerName}
-                    setCustomerName={setCustomerName} removeFromCart={removeFromCart}
-                    openPaymentModal={openPaymentModal} setErrorMessage={setErrorMessage}
+                    isMobile={false} 
+                    cart={cart} 
+                    total={total} 
+                    customerName={customerName}
+                    setCustomerName={setCustomerName} 
+                    removeFromCart={removeFromCart}
+                    handleSendToKitchen={handleSendToKitchen}
+                    isProcessingPayment={isProcessingPayment}
+                    setErrorMessage={setErrorMessage}
                 />
             </div>
 
@@ -562,9 +412,15 @@ export default function PdvPage() {
             {isCartOpenMobile && (
                 <div className="md:hidden fixed inset-0 z-50 bg-white">
                     <CartComponent 
-                        isMobile={true} cart={cart} total={total} customerName={customerName}
-                        setCustomerName={setCustomerName} removeFromCart={removeFromCart}
-                        setIsCartOpenMobile={setIsCartOpenMobile} openPaymentModal={openPaymentModal}
+                        isMobile={true} 
+                        cart={cart} 
+                        total={total} 
+                        customerName={customerName}
+                        setCustomerName={setCustomerName} 
+                        removeFromCart={removeFromCart}
+                        setIsCartOpenMobile={setIsCartOpenMobile} 
+                        handleSendToKitchen={handleSendToKitchen}
+                        isProcessingPayment={isProcessingPayment}
                         setErrorMessage={setErrorMessage}
                     />
                 </div>
@@ -599,123 +455,35 @@ export default function PdvPage() {
                 </div>
                 </div>
             )}
-
-            {isPaymentModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-                <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm m-4 max-h-[90vh] overflow-y-auto">
-                    
-                    <div className="border-b pb-4 mb-4">
-                        <div className="flex justify-between text-gray-600">
-                            <span>Subtotal</span>
-                            <span>{total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                        </div>
-                        <div className="flex justify-between items-center mt-2">
-                            <label htmlFor="discount" className="text-gray-600">Desconto</label>
-                            <div className="relative rounded-md shadow-sm w-28">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <span className="text-gray-500 sm:text-sm">R$</span>
-                                </div>
-                                <input
-                                    type="text"
-                                    inputMode='numeric'
-                                    name="discount"
-                                    id="discount"
-                                    className="focus:ring-[#A16207] focus:border-[#A16207] block w-full pl-8 pr-3 py-1 sm:text-sm text-red-500 border-gray-300 rounded-md text-right"
-                                    placeholder="0,00"
-                                    value={discount}
-                                    onChange={handleDiscountChange}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <h2 className="text-2xl font-bold mb-6 text-center text-gray-900">Total a Pagar: {totalAfterDiscount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</h2>
-                    
-                    <h3 className="text-lg font-semibold mb-3 text-gray-800">Forma de Pagamento:</h3>
-                    <div className="flex flex-col gap-3 mb-6">
-                    {['Dinheiro', 'Pix', 'Cartão'].map(method => (
-                        <button key={method} onClick={() => { setSelectedPaymentMethod(method); if(method !== 'Cartão') setCardType(null); }}
-                            className={`w-full py-3 rounded-lg font-semibold text-lg border-2 ${selectedPaymentMethod === method ? 'bg-[#A16207] text-white border-[#A16207]' : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'}`}
-                        >{method}</button>
-                    ))}
-                    {selectedPaymentMethod === 'Cartão' && (
-                        <div className="flex gap-3 animate-fade-in">
-                            <button onClick={() => setCardType('Débito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Débito' ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-100 text-blue-800 border-blue-200'}`}>Débito</button>
-                            <button onClick={() => setCardType('Crédito')} className={`w-full py-2 rounded-lg font-semibold border-2 ${cardType === 'Crédito' ? 'bg-purple-600 text-white border-purple-600' : 'bg-purple-100 text-purple-800 border-purple-200'}`}>Crédito</button>
-                        </div>
-                    )}
-                    </div>
-                    
-                    {selectedPaymentMethod === 'Dinheiro' && (
-                    <div className="border-t pt-4 space-y-3 animate-fade-in">
-                        <div>
-                            <label htmlFor="amountReceived" className="block text-sm font-medium text-gray-700">Valor Recebido</label>
-                            <div className="mt-1 relative rounded-md shadow-sm">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-gray-500 sm:text-sm">R$</span></div>
-                                <input type="text" inputMode='numeric' name="amountReceived" id="amountReceived"
-                                    className="focus:ring-[#A16207] focus:border-[#A16207] block w-full pl-8 pr-3 py-2 sm:text-sm text-gray-600 border-gray-300 rounded-md"
-                                    placeholder="0,00" value={amountReceived} onChange={handleAmountReceivedChange}
-                                />
-                            </div>
-                        </div>
-                        {amountReceived && (
-                            <div className={`text-center font-semibold text-lg p-2 rounded ${changeDue >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                {changeDue >= 0 ? `Troco: ${changeDue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
-                                            : `Faltam: ${Math.abs(changeDue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}
-                            </div>
-                        )}
-                    </div>
-                    )}
-                    
-                    {selectedPaymentMethod === 'Pix' && (
-                        <div className="text-center border-t pt-4">
-                            <p className="font-semibold mb-2 text-gray-600">Pague com PIX</p>
-                            <canvas ref={qrCanvasRef} className="mx-auto border"></canvas>
-                            <p className="text-sm mt-2 text-gray-600">Ou use a chave "Copia e Cola":</p>
-                            <div className="mt-1 flex items-center justify-between p-2 bg-gray-100 rounded-lg w-full">
-                                <span className="text-gray-800 font-mono text-xs mr-2 overflow-hidden whitespace-nowrap text-ellipsis max-w-[calc(100%-40px)]">{pixPayload}</span>
-                                <button onClick={copyToClipboard} className="bg-gray-200 p-1 rounded-md hover:bg-gray-300">
-                                    {copySuccess ? <CheckCircle size={16} className="text-green-600"/> : <Copy size={16} />}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex justify-end gap-3 mt-6 border-t pt-4">
-                    <button onClick={() => setIsPaymentModalOpen(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg">Cancelar</button>
-                    <button onClick={handleConfirmPayment} 
-                        className="px-4 py-2 bg-[#A16207] text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={isLoadingTaxas || (selectedPaymentMethod === 'Dinheiro' && (changeDue < 0 || amountReceived === '')) || isProcessingPayment}
-                    >
-                        Confirmar Pagamento
-                        {isProcessingPayment ? 'Processando...' : 'Confirmar Pagamento'}
-                    </button>
-                    </div>
-                </div>
-                </div>
-            )}
             
             {isSuccessModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
                     <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">
                         <CheckCircle size={50} className="text-green-500 mx-auto mb-4" />
-                        <h2 className="text-xl font-bold mb-2  text-gray-800">Venda finalizada com sucesso!</h2>
-                        <div className="flex flex-col gap-3 mt-6">
+                        <h2 className="text-xl font-bold mb-2  text-gray-800">Pedido Enviado!</h2>
+                        <p className="text-gray-700 mb-6">
+                            Deseja imprimir o comprovante do pedido?
+                        </p>
+                        <div className="flex flex-col gap-3">
                             <button 
-                                onClick={handlePrintLastReceipt}
+                                onClick={handlePrintAndClose}
                                 className="w-full bg-[#A16207] text-white py-3 rounded-lg font-semibold hover:bg-[#8f5606] flex items-center justify-center gap-2"
                             >
                                 <Printer size={18} />
-                                Imprimir Comprovante
+                                Sim, Imprimir
                             </button>
-                            <button onClick={closeSuccessModal} className="w-full bg-gray-200 text-gray-800 py-2 rounded-lg font-semibold hover:bg-gray-300">
-                                Nova Venda
+                            <button 
+                                onClick={closeSuccessModal}
+                                className="w-full bg-gray-200 text-gray-800 py-2 rounded-lg font-semibold hover:bg-gray-300"
+                            >
+                                Não (Nova Venda)
                             </button>
                         </div>
-                        </div>
+                    </div>
                 </div>
             )}
             
+
             {errorMessage && (
                 <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
                     <div className="bg-white p-10 rounded-lg shadow-xl w-full max-w-sm m-4 text-center">

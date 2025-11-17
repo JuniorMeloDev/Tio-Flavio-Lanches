@@ -18,6 +18,7 @@ export async function GET() {
             nome_cliente,
             status,
             custo_pagamento,
+            desconto,
             itens_venda (
                 quantidade,
                 preco_unitario,
