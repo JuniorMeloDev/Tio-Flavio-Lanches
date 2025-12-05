@@ -13,7 +13,7 @@ export default function HomePage() {
   const audioRef = useRef(null);
   const isPlaying = useRef(false);
   
-  const [showActivationModal, setShowActivationModal] = useState(true);
+  // REMOVIDO: const [showActivationModal, setShowActivationModal] = useState(true);
 
   // ... (todo o resto do seu código, como useEffects e handlers, permanece igual) ...
   // 🔊 Carrega o áudio uma vez
@@ -23,45 +23,9 @@ export default function HomePage() {
     audioRef.current.volume = 1.0;
   }, []);
 
-  // 🔔 Solicita permissão de notificação (apenas verifica o status inicial)
-  useEffect(() => {
-    if (Notification.permission === 'granted') {
-      setShowActivationModal(true); // Ainda mostramos para destravar o áudio
-    }
-  }, []);
+  // REMOVIDO: useEffect que verificava Notification.permission para mostrar o modal
   
-  // NOVA FUNÇÃO: Chamada pelo botão do modal
-  const handleActivateClick = async () => {
-    let audioUnlocked = false;
-
-    // 1. Tenta destravar o áudio
-    if (!isAudioUnlocked && audioRef.current) {
-        try {
-            await audioRef.current.play();
-            audioRef.current.pause();
-            audioRef.current.currentTime = 0;
-            setIsAudioUnlocked(true);
-            audioUnlocked = true;
-            console.log("Áudio (Home) DESBLOQUEADO pelo clique no modal.");
-        } catch (e) {
-            console.warn("Falha ao destravar áudio (provavelmente já destravado):", e);
-            // Mesmo se falhar (ex: já destravado), marcamos como true para esconder o modal
-            setIsAudioUnlocked(true);
-            audioUnlocked = true;
-        }
-    }
-
-    // 2. Pede permissão de notificação
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'default') {
-            await Notification.requestPermission();
-        }
-    }
-
-    // 3. Esconde o modal
-    setShowActivationModal(false);
-  };
-
+  // REMOVIDO: Função handleActivateClick
 
   const handleToggleSound = () => {
     const isEnabling = !soundEnabled;
@@ -88,9 +52,12 @@ export default function HomePage() {
       if (currentOrderCount > 0) {
         // ... e o som está ligado, liberado, e AINDA NÃO está tocando...
         if (soundEnabled && isAudioUnlocked && audioRef.current && !isPlaying.current) {
-          console.log("HOME: Tocando alarme..."); // Agora este log deve aparecer
-          audioRef.current.play().catch(e => console.warn("Falha ao tocar som:", e));
-          isPlaying.current = true;
+          console.log("HOME: Tocando alarme..."); 
+          
+          // --- ÁUDIO COMENTADO ---
+          // audioRef.current.play().catch(e => console.warn("Falha ao tocar som:", e));
+          
+          // isPlaying.current = true; // Comentado para manter coerência
         }
 
         // --- LÓGICA DE NOTIFICAÇÃO (separada) ---
@@ -199,36 +166,20 @@ export default function HomePage() {
 
   return (
     <>
-      {/* NOVO MODAL DE ATIVAÇÃO */}
-      {showActivationModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center z-[100] p-4 text-center">
-          <BellRing size={60} className="text-yellow-400 mb-6 animate-pulse" />
-          <h1 className="text-3xl font-bold text-white mb-4">Ativar Notificações</h1>
-          <p className="text-gray-300 text-lg mb-8 max-w-md">
-            Clique no botão abaixo para permitir sons e notificações de novos pedidos.
-            Isso é necessário para o alarme da cozinha funcionar.
-          </p>
-          <button
-            onClick={handleActivateClick}
-            className="bg-[#A16207] text-white font-bold py-4 px-8 rounded-lg text-xl transition-transform hover:scale-105"
-          >
-            Ativar Sons e Notificações
-          </button>
-        </div>
-      )}
+      {/* REMOVIDO: Modal de ativação */}
 
       {/* SEU CONTEÚDO DE PÁGINA EXISTENTE */}
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-[#3A3226] to-[#251a08] p-4 font-sans">
         
         {/* Wrapper para botões no canto superior */}
         <div className="absolute top-4 right-4 flex gap-3">
-          <button
+          {/* <button
             onClick={handleToggleSound}
             className={`p-3 rounded-full text-white transition-colors ${soundEnabled ? 'bg-green-600/50' : 'bg-red-600/50'}`}
             title={soundEnabled ? "Desativar som" : "Ativar som"}
           >
             {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-          </button>
+          </button> */}
 
           {/* Botão de Sair (Logout) */}
           <form action={logout}>

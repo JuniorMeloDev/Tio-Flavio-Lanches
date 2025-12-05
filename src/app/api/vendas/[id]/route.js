@@ -6,17 +6,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// GET: Busca os detalhes completos de uma única venda pelo seu ID
-// (Esta função GET permanece sem alterações)
+// GET: Busca os detalhes completos de uma única venda
 export async function GET(request, { params }) {
   const { id } = params;
-
-  if (!id) {
-    return NextResponse.json({ message: 'ID da venda não fornecido.' }, { status: 400 });
-  }
+  if (!id) return NextResponse.json({ message: 'ID obrigatório.' }, { status: 400 });
 
   try {
-    // 1. Busca os dados principais da venda
     const { data: vendaData, error: vendaError } = await supabase
       .from('vendas')
       .select('*')
@@ -25,62 +20,104 @@ export async function GET(request, { params }) {
 
     if (vendaError) throw vendaError;
 
-    // 2. Busca os itens da venda, juntando com a tabela de produtos para obter o nome
     const { data: itensData, error: itensError } = await supabase
       .from('itens_venda')
-      .select(`
-        quantidade,
-        preco_unitario,
-        produtos ( nome )
-      `)
+      .select(`quantidade, preco_unitario, produtos ( nome )`)
       .eq('venda_id', id);
 
     if (itensError) throw itensError;
 
-    // 3. Combina os resultados
-    const comprovanteCompleto = {
-      ...vendaData,
-      itens: itensData,
-    };
-
-    return NextResponse.json(comprovanteCompleto);
+    return NextResponse.json({ ...vendaData, itens: itensData });
   } catch (error) {
-    console.error('Erro ao buscar detalhes da venda:', error);
     return NextResponse.json({ message: error.message }, { status: 500 });
   }
 }
 
-
-// --- FUNÇÃO DELETE TOTALMENTE MODIFICADA ---
-// Agora ela chama a função RPC para garantir que o estoque seja restaurado
-export async function DELETE(request, { params }) {
+// PUT: Edita os itens de uma venda (Recalcula estoque e total)
+export async function PUT(request, { params }) {
   const { id } = params;
+  const { itens, total } = await request.json(); // 'itens' é a NOVA lista desejada
 
-  if (!id) {
-    return NextResponse.json({ message: 'ID da venda não fornecido.' }, { status: 400 });
-  }
+  if (!id || !itens) return NextResponse.json({ message: 'Dados inválidos.' }, { status: 400 });
 
   try {
-    console.log(`Iniciando RPC 'excluir_venda_e_restaurar_estoque' para venda #${id}`);
+    // 1. Buscar itens ANTIGOS para restaurar estoque
+    const { data: oldItems, error: fetchError } = await supabase
+      .from('itens_venda')
+      .select('produto_id, quantidade')
+      .eq('venda_id', id);
+    
+    if (fetchError) throw fetchError;
 
-    // 1. Chama a função RPC no Supabase
-    // Esta função fará todo o trabalho: restaurar estoque E excluir a venda.
-    const { error } = await supabase.rpc('excluir_venda_e_restaurar_estoque', {
-      p_venda_id: id
-    });
-
-    // 2. Verifica se a chamada RPC deu erro
-    if (error) {
-      console.error("Erro ao chamar RPC 'excluir_venda_e_restaurar_estoque':", error);
-      throw new Error(`Erro no banco de dados: ${error.message}`);
+    // 2. Restaurar estoque dos itens antigos
+    for (const item of oldItems) {
+      // Busca estoque atual
+      const { data: prod } = await supabase.from('produtos').select('quantidade_estoque').eq('id', item.produto_id).single();
+      if (prod) {
+        await supabase.from('produtos')
+          .update({ quantidade_estoque: prod.quantidade_estoque + item.quantidade })
+          .eq('id', item.produto_id);
+      }
     }
 
-    // 3. Retorna sucesso
-    return NextResponse.json({ message: `Venda #${id} excluída e estoque restaurado com sucesso.` });
+    // 3. Limpar itens antigos da venda
+    const { error: deleteError } = await supabase.from('itens_venda').delete().eq('venda_id', id);
+    if (deleteError) throw deleteError;
+
+    // 4. Inserir NOVOS itens e Deduzir estoque
+    const itensParaInserir = [];
+    let custoTotalPagamento = 0; // Se quiser recalcular custo base, senão mantém
+
+    for (const newItem of itens) {
+      // Deduz estoque
+      const { data: prod } = await supabase.from('produtos').select('quantidade_estoque, preco_custo').eq('id', newItem.id).single();
+      
+      if (prod) {
+        await supabase.from('produtos')
+          .update({ quantidade_estoque: prod.quantidade_estoque - newItem.quantity })
+          .eq('id', newItem.id);
+        
+        itensParaInserir.push({
+          venda_id: id,
+          produto_id: newItem.id,
+          quantidade: newItem.quantity,
+          preco_unitario: newItem.preco,
+          preco_custo_unitario: prod.preco_custo // Mantém histórico de custo
+        });
+      }
+    }
+
+    if (itensParaInserir.length > 0) {
+      const { error: insertError } = await supabase.from('itens_venda').insert(itensParaInserir);
+      if (insertError) throw insertError;
+    }
+
+    // 5. Atualizar total da venda
+    const { error: updateError } = await supabase
+      .from('vendas')
+      .update({ valor_total: total })
+      .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    return NextResponse.json({ message: 'Venda atualizada com sucesso' });
 
   } catch (error) {
-    console.error(`Erro completo ao excluir venda #${id}:`, error);
-    // Retorna a mensagem de erro específica
+    console.error("Erro ao editar venda:", error);
+    return NextResponse.json({ message: error.message }, { status: 500 });
+  }
+}
+
+// DELETE: Exclui venda
+export async function DELETE(request, { params }) {
+  const { id } = params;
+  if (!id) return NextResponse.json({ message: 'ID obrigatório.' }, { status: 400 });
+
+  try {
+    const { error } = await supabase.rpc('excluir_venda_e_restaurar_estoque', { p_venda_id: id });
+    if (error) throw new Error(error.message);
+    return NextResponse.json({ message: `Venda #${id} excluída.` });
+  } catch (error) {
     return NextResponse.json({ message: error.message }, { status: 500 });
   }
 }

@@ -1,4 +1,3 @@
-// src/app/vendas/page.jsx
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -7,9 +6,24 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { ShoppingBag, Calendar, CreditCard, ArrowLeft, Printer, X, Settings, Loader2, Save, FileText, AlertCircle, Download, Trash2 } from 'lucide-react'; // Ícones adicionados
 
+// --- Funções auxiliares de data (ADICIONADAS) ---
+const getTodayDate = () => {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const getFirstDayOfMonth = () => {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}-01`;
+};
+
 const generateAndPrintReceipt = (venda) => {
- 
-    
+    // ... (same as original)
     const subtotal = venda.itens?.reduce((acc, item) => acc + (item.quantidade * item.preco_unitario), 0) || venda.valor_total;
     const desconto = (venda.desconto !== undefined) ? venda.desconto : (subtotal - venda.valor_total);
     const hasDiscountInfo = desconto > 0;
@@ -189,7 +203,15 @@ const generateAndPrintCostReport = (vendas, totais, filters) => {
 
 export default function VendasPage() {
   const [allVendas, setAllVendas] = useState([]);
-  const [filters, setFilters] = useState({ startDate: '', endDate: '', minValor: '', maxValor: '' });
+  
+  // --- ALTERAÇÃO: Inicialização com Mês Atual ---
+  const [filters, setFilters] = useState({ 
+      startDate: getFirstDayOfMonth(), 
+      endDate: getTodayDate(), 
+      minValor: '', 
+      maxValor: '' 
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isTaxasModalOpen, setIsTaxasModalOpen] = useState(false);
@@ -258,8 +280,15 @@ export default function VendasPage() {
     setFilters(prev => ({ ...prev, [name]: value }));
     setCurrentPage(1);
   };
+  
+  // --- ALTERAÇÃO: Limpar reseta para Mês Atual ---
   const clearFilters = () => {
-    setFilters({ startDate: '', endDate: '', minValor: '', maxValor: '' });
+    setFilters({ 
+        startDate: getFirstDayOfMonth(), 
+        endDate: getTodayDate(), 
+        minValor: '', 
+        maxValor: '' 
+    });
     setCurrentPage(1);
   };
 

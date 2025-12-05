@@ -16,10 +16,13 @@ export async function GET() {
         criado_em,
         nome_cliente,
         status,
-        valor_total, 
+        valor_total,
+        desconto,
         itens_venda (
+          produto_id,
           quantidade,
-          produtos ( nome )
+          preco_unitario,
+          produtos ( nome, preco, preco_custo )
         )
       `)
       .in('status', ['Recebido', 'Em Produção'])
@@ -36,9 +39,8 @@ export async function GET() {
   }
 }
 
-// PUT: Atualiza o estado de um pedido (pode ou não incluir método de pagamento)
+// PUT: Atualiza o estado de um pedido (status ou pagamento)
 export async function PUT(request) {
-    // Adicionado "valor_total" e "desconto"
     const { id, status, metodo_pagamento, valor_total, desconto } = await request.json();
 
     if (!id || !status) {
@@ -51,9 +53,6 @@ export async function PUT(request) {
         updateData.metodo_pagamento = metodo_pagamento;
     }
 
-    // --- BLOCO ADICIONADO ---
-    // Se o pagamento está sendo feito (status='Pago'), 
-    // atualizamos também o total (com desconto) e o valor do desconto.
     if (status === 'Pago') {
         if (valor_total !== undefined) {
             updateData.valor_total = valor_total;
@@ -62,7 +61,6 @@ export async function PUT(request) {
             updateData.desconto = desconto; 
         }
     }
-    // --- FIM DO BLOCO ---
 
     try {
         const { data, error } = await supabase
@@ -79,4 +77,3 @@ export async function PUT(request) {
         return NextResponse.json({ message: error.message }, { status: 500 });
     }
 }
-
