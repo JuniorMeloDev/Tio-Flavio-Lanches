@@ -8,7 +8,7 @@ const supabase = createClient(
 
 // GET: Busca os detalhes completos de uma única venda
 export async function GET(request, { params }) {
-  const { id } = params;
+  const { id } = await params;
   if (!id) return NextResponse.json({ message: 'ID obrigatório.' }, { status: 400 });
 
   try {
@@ -35,7 +35,7 @@ export async function GET(request, { params }) {
 
 // PUT: Edita os itens de uma venda (Recalcula estoque e total)
 export async function PUT(request, { params }) {
-  const { id } = params;
+  const { id } = await params;
   const { itens, total } = await request.json(); // 'itens' é a NOVA lista desejada
 
   if (!id || !itens) return NextResponse.json({ message: 'Dados inválidos.' }, { status: 400 });
@@ -110,7 +110,7 @@ export async function PUT(request, { params }) {
 
 // DELETE: Exclui venda
 export async function DELETE(request, { params }) {
-  const { id } = params;
+  const { id } = await params;
   if (!id) return NextResponse.json({ message: 'ID obrigatório.' }, { status: 400 });
 
   try {
